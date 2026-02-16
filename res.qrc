@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/icon">
+        <file alias="test">Skan_20251105.png</file>
+        <file alias="zygzag">ZigZag.png</file>
+    </qresource>
+</RCC>
