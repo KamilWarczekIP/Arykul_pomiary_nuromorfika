@@ -21,7 +21,8 @@ signals:
     void update_preview();
 
 private slots:
-    void on_pushButton_clicked();
+    void sprawdzPopiecieAparatury();
+    void recalculateSignalTime();
 
     void on_spinBox_A_valueChanged(int arg1);
 
@@ -35,7 +36,7 @@ private slots:
 
     void on_comboBox_currentIndexChanged(int index);
 
-    void on_spinBox_liczba__valueChanged(int arg1);
+    void on_spinBox_liczba_pomiarow_valueChanged(int arg1);
 
     void on_spinBox_amplituda_valueChanged(int arg1);
 
@@ -43,10 +44,16 @@ private slots:
 
     void on_lineEdit_nazwa_textChanged(const QString &arg1);
 
-    void on_pushButton_2_clicked();
+    void on_pushButton_max_czest_clicked();
+
+    void on_spinBox_tigger_offset_valueChanged(int arg1);
+
+    void on_pushButton_start_clicked();
 
 private:
     Ui::MainWindow *ui;
     void recalculateLimits();
+
+    QTimer* aparatura_timer;
 };
 #endif // MAINWINDOW_HPP

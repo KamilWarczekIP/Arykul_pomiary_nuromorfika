@@ -1,7 +1,9 @@
 #include "backend.hpp"
+#include <QFile>
+#include <QDir>
 #include <qdebug.h>
-#include <visa.h>
 #include <dwf.h>
+#include <visa.h>
 
 static constexpr int CHANNEL0 = 0;
 static constexpr int CHANNEL1 = 1;
@@ -20,21 +22,61 @@ Backend::Backend(QObject *parent)
     , amplitude(1000)
     , readout_amplitude(50)
     , repeat_times(10)
-    , max_freq(10000.0)
+    , max_freq(1000000.0) // 10 MHz
     , min_freq(0.0)
+    , defaultRM(VI_NULL)
+    , keythley_handle(VI_NULL)
+    , visa_address_keythley("USB0::0x05E6::0x6500::04645729::INSTR")
+    , filename_suffix("")
 {
     FDwfParamSet(DwfParamOnClose, 0);
     FDwfDeviceOpen(-1, &analog_handle);
     FDwfDeviceAutoConfigureSet(analog_handle, 0);
     FDwfDeviceReset(analog_handle);
     FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
+    FDwfDeviceClose(analog_handle);
+
+    ViStatus status;
+    status = viOpenDefaultRM(&defaultRM);
+    if (status != VI_SUCCESS)
+        qDebug() << "Problem z managerem zasobów VISA32";
 }
 
 Backend::~Backend()
 {
     FDwfDeviceCloseAll();
+    viClose(keythley_handle);
+    viClose(defaultRM);
 }
 
+
+bool Backend::analogDiscoveryStatus()
+{
+    FDwfDeviceCloseAll();
+    int number_of_devices;
+    FDwfEnum(enumfilterDiscovery2, &number_of_devices);
+    if(number_of_devices == 0)
+        return false;
+    FDwfDeviceOpen(number_of_devices, &analog_handle);
+    DWFERC rec;
+    FDwfGetLastError(&rec);
+    if(rec != dwfercNoErc)
+        return false;
+
+    FDwfDeviceCloseAll();
+    return true;
+}
+bool Backend::keythleyStatus()
+{
+    ViStatus status;
+    status = viOpen(defaultRM, const_cast<ViRsrc>(visa_address_keythley.c_str()), VI_NULL, VI_NULL, &keythley_handle);
+    if (status != VI_SUCCESS)
+        return false;
+
+    viClose(keythley_handle);
+    return true;
+
+}
 
 void Backend::generatePreview()
 {
@@ -61,12 +103,14 @@ Signal Backend::generateTriggerSignal()
     double C_sec = ((double)C / MICROSEC_IN_SEC);
     double D_sec = ((double)D / MICROSEC_IN_SEC);
     double E_sec = ((double)E / MICROSEC_IN_SEC);
+    double trigger_offset_sec = ((double)trigger_offset / MICROSEC_IN_SEC);
 
     uint A_samples = A_sec * max_freq;
     uint B_samples = B_sec * max_freq;
     uint C_samples = C_sec * max_freq;
     uint D_samples = D_sec * max_freq;
     uint E_samples = E_sec * max_freq;
+    uint trigger_offset_samples = trigger_offset_sec * max_freq;
 
     switch(measurement_type)
     {
@@ -75,6 +119,7 @@ Signal Backend::generateTriggerSignal()
         signal.count += C_samples;
         signal.count += B_samples;
     case Impulse:
+        signal.count += A_samples;
         signal.count += A_samples;
         signal.count += B_samples;
         signal.count += D_samples;
@@ -98,7 +143,12 @@ Signal Backend::generateTriggerSignal()
     {
         signal.samples[index + offset_index] = 1.0;
     }
-    // TODO trigger przesuniecie
+
+    //trigger przesuniecie - nadpisuje zerami
+    for(size_t index = 0; index < trigger_offset_samples; index++)
+    {
+        signal.samples[index + offset_index] = 0.0;
+    }
     offset_index += D_samples;
     for(size_t index = 0; index < E_samples; index++)
     {
@@ -136,6 +186,7 @@ Signal Backend::generateSignal()
         signal.count += B_samples;
     case Impulse:
         signal.count += A_samples;
+        signal.count += A_samples;
         signal.count += B_samples;
         signal.count += D_samples;
         signal.count += E_samples;
@@ -166,6 +217,10 @@ Signal Backend::generateSignal()
             signal.samples[index] = normalized_amplitude * -1.0;
         }
     }
+    for(last_index = index; index < A_samples + last_index; index++)
+    {
+        signal.samples[index] = 0.0;
+    }
     for(last_index = index; index < D_samples + last_index; index++)
     {
         signal.samples[index] = normalized_readout_amplitude;
@@ -178,6 +233,8 @@ Signal Backend::generateSignal()
     //sanity check
     if(index == signal.count)
         qDebug() << "Spoko";
+
+
 
     return signal;
 }
@@ -214,8 +271,13 @@ double Backend::getSignalTimeInSeconds() const
     }
 }
 
-void Backend::runMeasurement()
+void Backend::runMeasurement(double const frequency)
 {
+    FDwfParamSet(DwfParamOnClose, 0);
+    FDwfDeviceOpen(-1, &analog_handle);
+    FDwfDeviceAutoConfigureSet(analog_handle, 0);
+    FDwfDeviceReset(analog_handle);
+
     // Defualt hold inital voltage
     FDwfAnalogOutIdleSet(analog_handle, CHANNEL_BOTH, DwfAnalogOutIdleInitial);
 
@@ -255,92 +317,129 @@ void Backend::runMeasurement()
     delete[] trigger_signal.samples;
 
     // Send setup to keithley
-    ViSession defaultRM = VI_NULL;  // Resource manager session
-    ViSession instr = VI_NULL;      // Instrument session
-    ViStatus status;
-    ViChar *buffer = new ViChar[4096];
     ViUInt32 retCount;
-    std::string visaAddress = "USB0::0x05E6::0x6500::04645729::INSTR";
-    status = viOpenDefaultRM(&defaultRM);
-    if (status != VI_SUCCESS) {
-        qDebug() << "Failed to open VISA resource manager.";
-        emit fail();
-        return;
-    }
-    status = viOpen(defaultRM, const_cast<ViRsrc>(visaAddress.c_str()), VI_NULL, VI_NULL, &instr);
-    if (status != VI_SUCCESS) {
-        qDebug() << "Failed to open instrument session.";
+    ViStatus keythley_status;
+    keythley_status = viOpen(defaultRM, const_cast<ViRsrc>(visa_address_keythley.c_str()), VI_NULL, VI_NULL, &keythley_handle);
+    if (keythley_status != VI_SUCCESS)
+    {
+        qDebug() << "Nie udalo sie nawiazac polaczniea z keythleyem";
         viClose(defaultRM);
         emit fail();
         return;
     }
-    viSetAttribute(instr, VI_ATTR_TMO_VALUE, 5000);
-    QString tspCommand = "MEASURE:VOLTAGE?";
-    status = viWrite(instr, reinterpret_cast<ViConstBuf>(tspCommand.constData()), tspCommand.size(), &retCount);
-    if (status != VI_SUCCESS) {
-        qDebug() << "Failed to write command to instrument.";
-        viClose(instr);
-        viClose(defaultRM);
-        emit fail();
-        return;
-    }
+    viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 5000);
+    QString tsp_command = QString(
+    // -- resetowanie i ustawienia początkowe
+    "reset()"
+    "dmm.reset()"
+    "dmm.digitize.func = dmm.FUNC_DC_CURRENT"
+    "dmm.digitize.range = 0.000001"
+    "dmm.digitize.samplerate = 1000000"
+    "dmm.measure.nplc = 0.0005"
 
+    //-- wyswietlanie informacji
+    "display.clear()"
+    "display.changescreen(display.SCREEN_USER_SWIPE)"
+    "display.settext(display.TEXT1, \"Pomiar trwa\")"
+    "display.settext(display.TEXT2, \"Nie dotykej\")"
+
+    //--     zmienic na liczba pomairow + 1
+    "defbuffer1.capacity = 100000"
+    "defbuffer1.clear()"
+    "trigger.clear()"
+    "trigger.model.load(\"Empty\")"
+    "trigger.extin.edge = trigger.EDGE_RISING"
+
+    //-- Trigger zewnetrzny
     // 2 micro sekundy minimum między triggerami
-    /*
-    reset()
-    dmm.reset()
-    dmm.digitize.func = dmm.FUNC_DC_CURRENT
-    dmm.digitize.range = 0.000001
-    dmm.digitize.samplerate = 100000
-    dmm.measure.nplc = 0.0005
+    "trigger.model.setblock(1, trigger.BLOCK_WAIT, trigger.EVENT_EXTERNAL)"
+    "trigger.model.setblock(2, trigger.BLOCK_MEASURE_DIGITIZE, defbuffer1, 1)"
+    "trigger.model.setblock(3, trigger.BLOCK_BRANCH_COUNTER, $$$$$$$$$$, 1)"
+    //-- Start triggera
+    "trigger.model.initiate() ");
 
-    display.clear()
-    display.changescreen(display.SCREEN_USER_SWIPE)
-    display.settext(display.TEXT1, "Pomiar trwa")
-    display.settext(display.TEXT2, "Nie dotykej")
-
---     zmienic na liczba pomairow + 1
-    defbuffer1.capacity = 100000
-    defbuffer1.clear()
-    trigger.clear()
-    trigger.model.load("Empty")
-    trigger.extin.edge = trigger.EDGE_RISING
-
-    -- Trigger zewnetrzny
-    trigger.model.setblock(1, trigger.BLOCK_WAIT, trigger.EVENT_EXTERNAL)
-    trigger.model.setblock(2, trigger.BLOCK_MEASURE_DIGITIZE, defbuffer1, 1)
-    trigger.model.setblock(3, trigger.BLOCK_BRANCH_COUNTER, $$$$$$$$$$, 1)
-    -- Start triggera
-    trigger.model.initiate()
-
-
-
-format.data = format.REAL64
-printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)
-    */
+    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
+    if (keythley_status != VI_SUCCESS)
+    {
+        qDebug() << "Nie udalo sie przeslac skryptu na keythleya";
+        viClose(keythley_handle);
+        emit fail();
+        return;
+    }
 
     // Run analog signal
     FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
     FDwfAnalogOutConfigure(analog_handle, CHANNEL_BOTH, true);
     emit progress(10);
-    // Download results keythle
-    status = viRead(instr, reinterpret_cast<ViBuf>(buffer), sizeof(buffer) - 1, &retCount);
-    if (status == VI_SUCCESS || status == VI_SUCCESS_MAX_CNT) {
-        buffer[retCount] = '\0';  // Null-terminate the string
-        qDebug() << "Instrument response: " << buffer;
-    } else {
-        qDebug() << "Failed to read response from instrument.";
+
+
+    // Download results keythley
+    tsp_command = QString(
+        "format.data = format.REAL64"
+        "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)"
+    );
+    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
+    if (keythley_status != VI_SUCCESS)
+    {
+        qDebug() << "Nie udalo sie przeslac skryptu odczytywania na keythleya";
+        viClose(keythley_handle);
+        emit fail();
+        return;
     }
-    viClose(instr);
-    viClose(defaultRM);
+
+    ViChar *buffer = new ViChar[4096 * 4];
+    keythley_status = viRead(keythley_handle, reinterpret_cast<ViBuf>(buffer), sizeof(buffer) - 1, &retCount);
+    if (keythley_status != VI_SUCCESS && keythley_status != VI_SUCCESS_MAX_CNT)
+    {
+        qDebug() << "Failed to read response from keythley";
+        emit fail();
+        return;
+    }
+    buffer[retCount] = '\0';  // Null-terminate the string
+    qDebug() << "Instrument response: " << buffer;
+
     // Save results
     emit progress(90);
-    // Display plot with results preview
+    QFile plik_wyniki = QFile(QDir::currentPath().append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString()));
+    if(!plik_wyniki.open(QIODevice::Text | QIODevice::WriteOnly))
+    {
+        qDebug() << "Nie udało się otworzyć pliku: " << plik_wyniki.errorString();
+        emit fail();
+        return;
+    }
+
+    QString measurement_parameters = QString("A [us], %1 \n").arg(A);
+    measurement_parameters += QString("B [us], %1 \n").arg(B);
+    measurement_parameters += QString("C [us], %1 \n").arg(C);
+    measurement_parameters += QString("D [us], %1 \n").arg(D);
+    measurement_parameters += QString("E [us], %1 \n").arg(E);
+    measurement_parameters += QString("Impulse Type, %1 \n").arg((int)measurement_type);
+    measurement_parameters += QString("Amplitude [mV], %1 \n").arg(amplitude);
+    measurement_parameters += QString("Readout amplitude [mV], %1 \n").arg(readout_amplitude);
+    measurement_parameters += QString("Repat times, %1 \n").arg(repeat_times);
+    measurement_parameters += QString("Frequency, %1 \n").arg(frequency);
+    plik_wyniki.write(measurement_parameters.toLocal8Bit());
+
+    if(plik_wyniki.write(buffer) != retCount)
+    {
+        qDebug() << "Nie udało się zapisać całego pliku :< ";
+        emit fail();
+        return;
+    }
+
+
+    plik_wyniki.close();
+    delete[] buffer;
+
+
+    // Display plot with results preview - close all connections
     emit progress(100);
+    viClose(keythley_handle);
+    FDwfDeviceClose(analog_handle);
 }
 void Backend::setSignal(int channel, Signal& signal)
 {
-    int samples_count_min, samples_count_max;
+    int samples_count_min = 2137, samples_count_max = 420;
     FDwfAnalogOutNodeDataInfo(analog_handle, channel, AnalogOutNodeCarrier, &samples_count_min, &samples_count_max);
     // SAnity is lost RIP
     qDebug() << "Possible samples: " << samples_count_min << " === " << samples_count_max << "   actual: " << signal.count;

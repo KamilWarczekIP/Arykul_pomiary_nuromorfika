@@ -18,7 +18,7 @@ void QPlot::repaint()
 void QPlot::paintEvent(QPaintEvent* event)
 {
 
-    int top = 0;
+    int top = 1;
     int bottom = height() - 1;
     int center = height() / 2;
     constexpr const int LETTER_WIDTH = 5;
@@ -29,50 +29,80 @@ void QPlot::paintEvent(QPaintEvent* event)
     }
 
     QPainter painter(this);
-    painter.setBrush(Qt::white);
     int painter_x_position = 0;
-    painter.drawText(painter_x_position + backend().A / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "A");
+    painter.setPen(Qt::green);
     painter.drawLine(painter_x_position, center, painter_x_position + backend().A, center);
+    if(backend().A > LETTER_WIDTH * 2)
+        painter.drawText(painter_x_position + backend().A / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "A");
     painter_x_position += backend().A;
+    painter.setPen(Qt::white);
     painter.drawLine(painter_x_position, center, painter_x_position, top);
-    painter.drawText(painter_x_position + backend().B / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "B");
+    painter.setPen(Qt::blue);
+    if(backend().B > LETTER_WIDTH * 2)
+        painter.drawText(painter_x_position + backend().B / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "B");
     painter.drawLine(painter_x_position, top, painter_x_position + backend().B, top);
     painter_x_position += backend().B;
+    painter.setPen(Qt::white);
     painter.drawLine(painter_x_position, top, painter_x_position, center);
 
     switch (backend().measurement_type)
     {
     case Backend::Impulse:
-        painter.drawText(painter_x_position + backend().A / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "A");
-        painter.drawLine(painter_x_position, center, painter_x_position + backend().A, center);
-        painter_x_position += backend().A;
         break;
     case Backend::ZygZag:
     case Backend::ZygZag_Odwrocony:
-        painter.drawText(painter_x_position + backend().C / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "C");
+        painter.setPen(Qt::cyan);
+        if(backend().C > LETTER_WIDTH * 2)
+            painter.drawText(painter_x_position + backend().C / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "C");
         painter.drawLine(painter_x_position, center, painter_x_position + backend().C, center);
         painter_x_position += backend().C;
+        painter.setPen(Qt::white);
         painter.drawLine(painter_x_position, center, painter_x_position, bottom);
-        painter.drawText(painter_x_position + backend().B / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "B");
+        painter.setPen(Qt::blue);
+        if(backend().B > LETTER_WIDTH * 2)
+            painter.drawText(painter_x_position + backend().B / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "B");
         painter.drawLine(painter_x_position, bottom, painter_x_position + backend().B, bottom);
         painter_x_position += backend().B;
+        painter.setPen(Qt::white);
         painter.drawLine(painter_x_position, bottom, painter_x_position, center);
-        painter.drawText(painter_x_position + backend().A / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "A");
-        painter.drawLine(painter_x_position, center, painter_x_position + backend().A, center);
-        painter_x_position += backend().A;
         break;
     }
+    painter.setPen(Qt::green);
+    if(backend().A > LETTER_WIDTH * 2)
+        painter.drawText(painter_x_position + backend().A / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "A");
+    painter.drawLine(painter_x_position, center, painter_x_position + backend().A, center);
+    painter_x_position += backend().A;
 
     int readout_height = center - ((double)backend().readout_amplitude / backend().amplitude) * center;
+    painter.setPen(Qt::white);
     painter.drawLine(painter_x_position, center, painter_x_position, readout_height);
-    painter.drawText(painter_x_position + backend().D / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "D");
+    painter.setPen(Qt::yellow);
+    if(backend().D > LETTER_WIDTH * 2)
+        painter.drawText(painter_x_position + backend().D / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "D");
     painter.drawLine(painter_x_position, readout_height, painter_x_position + backend().D, readout_height);
+    painter.setPen(Qt::red);
+    //Rysowanie linii triggera
+    painter.drawText(painter_x_position + backend().trigger_offset + LETTER_WIDTH, height() - LETTER_HEIGHT, "TRIG");
+
+    painter.drawLine(painter_x_position + backend().trigger_offset, top, painter_x_position + backend().trigger_offset, bottom);
     painter_x_position += backend().D;
+
+    painter.setPen(Qt::white);
     painter.drawLine(painter_x_position, readout_height, painter_x_position, center);
-    painter.drawText(painter_x_position + backend().E / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "E");
+    if(backend().E > LETTER_WIDTH)
+        painter.drawText(painter_x_position + backend().E / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "E");
     painter.drawLine(painter_x_position, center, painter_x_position + backend().E, center);
 
-    // Rysowanie linii co 100 microsekund
-    // skalowanie do widgetu
-    // kolory oznaczenia
+
+
+    // Rysowanie linii co 100 microsekund [ok]
+    painter.setPen(Qt::gray);
+    for (int offset = 0; offset < width(); offset += 100)
+    {
+        painter.drawLine(offset, top, offset, bottom);
+        painter.drawText(offset + LETTER_WIDTH, LETTER_HEIGHT, QString::number(offset) + " μs");
+    }
+
+    // skalowanie do widget [TODO]
+    // kolory oznaczenia [ok]
 }
