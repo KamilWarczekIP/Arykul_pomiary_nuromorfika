@@ -46,11 +46,14 @@ signals:
     void finishedMeasurement();
     void generatedPreview(Signal signal);
     void progress(int proc);
-    void fail();
+    void fail(QString message);
 
 public slots:
     void generatePreview();
     void runMeasurement(double const frequency);
+
+private slots:
+    void fail_cleanup(QString message);
 
 private:
     friend class MainWindow;

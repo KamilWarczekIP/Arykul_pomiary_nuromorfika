@@ -81,6 +81,11 @@ void QPlot::paintEvent(QPaintEvent* event)
         painter.drawText(painter_x_position + backend().D / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "D");
     painter.drawLine(painter_x_position, readout_height, painter_x_position + backend().D, readout_height);
     painter.setPen(Qt::red);
+
+    QPen trigger_line = QPen();
+    trigger_line.setColor(Qt::red);
+    trigger_line.setWidth(2);
+    painter.setPen(trigger_line);
     //Rysowanie linii triggera
     painter.drawText(painter_x_position + backend().trigger_offset + LETTER_WIDTH, height() - LETTER_HEIGHT, "TRIG");
 

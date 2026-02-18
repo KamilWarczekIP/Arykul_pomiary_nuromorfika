@@ -30,6 +30,8 @@ Backend::Backend(QObject *parent)
     , filename_suffix("")
     , file_location(QDir::currentPath())
 {
+    QObject::connect(this, &Backend::fail, this, &Backend::fail_cleanup);
+
     FDwfParamSet(DwfParamOnClose, 0);
     ViStatus status;
     status = viOpenDefaultRM(&defaultRM);
@@ -265,11 +267,24 @@ double Backend::getSignalTimeInSeconds() const
         return (double)(A + B + C + B + A + D) / MICROSEC_IN_SEC;
     }
 }
+void Backend::fail_cleanup(QString message)
+{
+    qDebug() << "Problem: " << message;
+    viClose(keythley_handle);
+    FDwfDeviceClose(analog_handle);
+}
 
 void Backend::runMeasurement(double const frequency)
 {
     FDwfParamSet(DwfParamOnClose, 0);
     FDwfDeviceOpen(-1, &analog_handle);
+    DWFERC rec;
+    FDwfGetLastError(&rec);
+    if(rec != dwfercNoErc)
+    {
+        emit fail("Nie udało się połączyć z analogiem");
+        return;
+    }
     FDwfDeviceAutoConfigureSet(analog_handle, 0);
     FDwfDeviceReset(analog_handle);
 
@@ -296,6 +311,15 @@ void Backend::runMeasurement(double const frequency)
     FDwfAnalogOutAmplitudeSet(analog_handle, CHANNEL0, (double)amplitude / VOLTS_IN_MILIVOLT);
     FDwfAnalogOutAmplitudeSet(analog_handle, CHANNEL1, TRIGGER_AMPLITUDE);
 
+    FDwfGetLastError(&rec);
+    if(rec != dwfercNoErc)
+    {
+        char error_message_buffer[256];
+        FDwfGetLastErrorMsg(error_message_buffer);
+        emit fail("Analog Discovery error: " + QString::fromLocal8Bit(error_message_buffer));
+        return;
+    }
+
     emit progress(5);
     // generate signals
     Signal signal = generateSignal();
@@ -317,9 +341,7 @@ void Backend::runMeasurement(double const frequency)
     keythley_status = viOpen(defaultRM, const_cast<ViRsrc>(visa_address_keythley.c_str()), VI_NULL, VI_NULL, &keythley_handle);
     if (keythley_status != VI_SUCCESS)
     {
-        qDebug() << "Nie udalo sie nawiazac polaczniea z keythleyem";
-        viClose(defaultRM);
-        emit fail();
+        emit fail("Nie udalo sie nawiazac polaczniea z keythleyem");
         return;
     }
     viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 5000);
@@ -356,9 +378,7 @@ void Backend::runMeasurement(double const frequency)
     keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
     {
-        qDebug() << "Nie udalo sie przeslac skryptu na keythleya";
-        viClose(keythley_handle);
-        emit fail();
+        emit fail("Nie udalo sie przeslac skryptu na keythleya");
         return;
     }
 
@@ -376,9 +396,7 @@ void Backend::runMeasurement(double const frequency)
     keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
     {
-        qDebug() << "Nie udalo sie przeslac skryptu odczytywania na keythleya";
-        viClose(keythley_handle);
-        emit fail();
+        emit fail("Nie udalo sie przeslac skryptu odczytywania na keythleya");
         return;
     }
 
@@ -386,8 +404,7 @@ void Backend::runMeasurement(double const frequency)
     keythley_status = viRead(keythley_handle, reinterpret_cast<ViBuf>(buffer), sizeof(buffer) - 1, &retCount);
     if (keythley_status != VI_SUCCESS && keythley_status != VI_SUCCESS_MAX_CNT)
     {
-        qDebug() << "Failed to read response from keythley";
-        emit fail();
+        emit fail("Nie udało się odczytać odpowiedzi z Keythleya");
         return;
     }
     buffer[retCount] = '\0';  // Null-terminate the string
@@ -398,8 +415,7 @@ void Backend::runMeasurement(double const frequency)
     QFile plik_wyniki = QFile(file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString()));
     if(!plik_wyniki.open(QIODevice::Text | QIODevice::WriteOnly))
     {
-        qDebug() << "Nie udało się otworzyć pliku: " << plik_wyniki.errorString();
-        emit fail();
+        emit fail("Nie udało się otworzyć pliku: " + plik_wyniki.errorString());
         return;
     }
 
@@ -417,8 +433,7 @@ void Backend::runMeasurement(double const frequency)
 
     if(plik_wyniki.write(buffer) != retCount)
     {
-        qDebug() << "Nie udało się zapisać całego pliku :< ";
-        emit fail();
+        emit fail("Nie udało się zapisać całego pliku :< ");
         return;
     }
 

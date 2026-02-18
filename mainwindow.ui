@@ -20,7 +20,7 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,4,2,5,1">
+   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,4,2,0,5,1">
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_4">
       <item>
@@ -65,6 +65,22 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
+       <spacer name="horizontalSpacer_3">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Policy::MinimumExpanding</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
        <layout class="QVBoxLayout" name="verticalLayout_A" stretch="1,2">
         <item>
          <widget class="QLabel" name="label_A">
@@ -100,6 +116,12 @@
             <width>300</width>
             <height>50</height>
            </size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
           </property>
           <property name="suffix">
            <string> μs</string>
@@ -151,6 +173,12 @@
             <height>50</height>
            </size>
           </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
+          </property>
           <property name="suffix">
            <string> μs</string>
           </property>
@@ -200,6 +228,12 @@
             <width>300</width>
             <height>50</height>
            </size>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
           </property>
           <property name="suffix">
            <string> μs</string>
@@ -251,6 +285,12 @@
             <height>50</height>
            </size>
           </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
+          </property>
           <property name="suffix">
            <string> μs</string>
           </property>
@@ -264,10 +304,39 @@
         </item>
        </layout>
       </item>
+      <item>
+       <spacer name="horizontalSpacer_4">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Policy::MinimumExpanding</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
      </layout>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout" stretch="3,4,2">
+     <spacer name="verticalSpacer_4">
+      <property name="orientation">
+       <enum>Qt::Orientation::Vertical</enum>
+      </property>
+      <property name="sizeHint" stdset="0">
+       <size>
+        <width>20</width>
+        <height>20</height>
+       </size>
+      </property>
+     </spacer>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout" stretch="3,3,2">
       <item>
        <layout class="QFormLayout" name="formLayout">
         <item row="2" column="1">
@@ -277,6 +346,9 @@
             <width>350</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="showGroupSeparator" stdset="0">
+           <bool>false</bool>
           </property>
           <property name="minimum">
            <number>1</number>
@@ -357,6 +429,9 @@
             <height>16777215</height>
            </size>
           </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
+          </property>
           <property name="suffix">
            <string> mV</string>
           </property>
@@ -375,6 +450,9 @@
             <width>350</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
           </property>
           <property name="suffix">
            <string> mV</string>
@@ -403,6 +481,9 @@
               <width>350</width>
               <height>16777215</height>
              </size>
+            </property>
+            <property name="buttonSymbols">
+             <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
             </property>
             <property name="suffix">
              <string> Hz</string>
@@ -451,6 +532,9 @@
             <width>350</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::ButtonSymbols::PlusMinus</enum>
           </property>
           <property name="suffix">
            <string> μs</string>

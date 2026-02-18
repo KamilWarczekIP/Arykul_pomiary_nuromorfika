@@ -23,6 +23,7 @@ signals:
 private slots:
     void sprawdzPopiecieAparatury();
     void recalculateSignalTime();
+    void resetAfterFail(QString message);
 
     void on_spinBox_A_valueChanged(int arg1);
 

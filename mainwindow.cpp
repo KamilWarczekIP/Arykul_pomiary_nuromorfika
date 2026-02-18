@@ -4,6 +4,7 @@
 #include "ui_mainwindow.h"
 #include <QFileDialog>
 #include <QDir>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -48,7 +49,7 @@ void MainWindow::sprawdzPopiecieAparatury()
         lokalizacja[44] = '.';
         lokalizacja[45] = '.';
     }
-    ui->statusBar->showMessage(QString("Analog Discovery: %1\t\t DMM6500: %2\t\t\t\t Lokalizacja pliku: %3").arg(analog_status ? "OK" : "Problem").arg(keythley_status ? "OK" : "Problem").arg(lokalizacja));
+    ui->statusBar->showMessage(QString("Analog Discovery: %1\t\t DMM6500: %2\t\t\t\t Lokalizacja pliku: %3").arg(analog_status ? "🟢 OK" : "🔴 Problem").arg(keythley_status ? "🟢 OK" : "🔴 Problem").arg(lokalizacja));
     ui->statusBar->setToolTip(backend().file_location);
     ui->statusBar->setToolTipDuration(3000);
     ui->pushButton_start->setEnabled(analog_status && keythley_status);
@@ -74,6 +75,16 @@ void MainWindow::recalculateLimits()
     emit update_preview();
 }
 
+void MainWindow::resetAfterFail(QString message)
+{
+    QMessageBox msgBox;
+    msgBox.setText("Wystąpił problem");
+    msgBox.setInformativeText(message);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    int ret = msgBox.exec();
+
+    ui->progressBar->setValue(0);
+}
 
 void MainWindow::on_spinBox_A_valueChanged(int arg1)
 {
