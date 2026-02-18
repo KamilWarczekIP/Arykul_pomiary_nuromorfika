@@ -2,6 +2,8 @@
 #include "backend.hpp"
 #include "qplot.hpp"
 #include "ui_mainwindow.h"
+#include <QFileDialog>
+#include <QDir>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -39,7 +41,16 @@ void MainWindow::sprawdzPopiecieAparatury()
 {
     bool analog_status = backend().analogDiscoveryStatus();
     bool keythley_status = backend().keythleyStatus();
-    ui->statusBar->showMessage(QString("Analog Discovery: %1\t\t DMM6500: %2").arg(analog_status ? "OK" : "Problem").arg(keythley_status ? "OK" : "Problem"));
+    QString lokalizacja = backend().file_location.left(46);
+    if(backend().file_location.size() > 42)
+    {
+        lokalizacja[43] = '.';
+        lokalizacja[44] = '.';
+        lokalizacja[45] = '.';
+    }
+    ui->statusBar->showMessage(QString("Analog Discovery: %1\t\t DMM6500: %2\t\t\t\t Lokalizacja pliku: %3").arg(analog_status ? "OK" : "Problem").arg(keythley_status ? "OK" : "Problem").arg(lokalizacja));
+    ui->statusBar->setToolTip(backend().file_location);
+    ui->statusBar->setToolTipDuration(3000);
     ui->pushButton_start->setEnabled(analog_status && keythley_status);
 
 }
@@ -177,5 +188,18 @@ void MainWindow::on_pushButton_start_clicked()
     ui->pushButton_start->setEnabled(true);
     ui->progressBar->setEnabled(false);
     aparatura_timer->start();
+}
+
+
+void MainWindow::on_pushButton_lokalizacja_pliku_clicked()
+{
+    QString nowa_lokalizacja = QFileDialog::getExistingDirectory(
+        nullptr,
+        "Wybierz gdzie zapisać wyniki",
+        backend().file_location,
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+    if(nowa_lokalizacja != "")
+        backend().file_location = nowa_lokalizacja;
 }
 

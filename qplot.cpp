@@ -96,7 +96,10 @@ void QPlot::paintEvent(QPaintEvent* event)
 
 
     // Rysowanie linii co 100 microsekund [ok]
-    painter.setPen(Qt::gray);
+    QPen pen_lines = QPen();
+    pen_lines.setColor(Qt::gray);
+    pen_lines.setStyle(Qt::PenStyle::DashLine);
+    painter.setPen(pen_lines);
     for (int offset = 0; offset < width(); offset += 100)
     {
         painter.drawLine(offset, top, offset, bottom);

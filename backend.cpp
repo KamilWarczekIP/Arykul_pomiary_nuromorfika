@@ -28,14 +28,9 @@ Backend::Backend(QObject *parent)
     , keythley_handle(VI_NULL)
     , visa_address_keythley("USB0::0x05E6::0x6500::04645729::INSTR")
     , filename_suffix("")
+    , file_location(QDir::currentPath())
 {
     FDwfParamSet(DwfParamOnClose, 0);
-    FDwfDeviceOpen(-1, &analog_handle);
-    FDwfDeviceAutoConfigureSet(analog_handle, 0);
-    FDwfDeviceReset(analog_handle);
-    FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
-    FDwfDeviceClose(analog_handle);
-
     ViStatus status;
     status = viOpenDefaultRM(&defaultRM);
     if (status != VI_SUCCESS)
@@ -62,7 +57,7 @@ bool Backend::analogDiscoveryStatus()
     FDwfGetLastError(&rec);
     if(rec != dwfercNoErc)
         return false;
-
+    FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
     FDwfDeviceCloseAll();
     return true;
 }
@@ -400,7 +395,7 @@ void Backend::runMeasurement(double const frequency)
 
     // Save results
     emit progress(90);
-    QFile plik_wyniki = QFile(QDir::currentPath().append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString()));
+    QFile plik_wyniki = QFile(file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString()));
     if(!plik_wyniki.open(QIODevice::Text | QIODevice::WriteOnly))
     {
         qDebug() << "Nie udało się otworzyć pliku: " << plik_wyniki.errorString();

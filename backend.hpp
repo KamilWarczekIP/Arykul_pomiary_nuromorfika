@@ -35,6 +35,7 @@ public:
     uint readout_amplitude; //milivolts
     uint trigger_offset;
     QString filename_suffix;
+    QString file_location;
     double getMaxFrequency() const;
     double getSignalTimeInSeconds() const;
     bool analogDiscoveryStatus();
