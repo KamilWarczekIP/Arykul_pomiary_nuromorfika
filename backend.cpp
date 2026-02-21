@@ -54,12 +54,11 @@ bool Backend::analogDiscoveryStatus()
     FDwfEnum(enumfilterDiscovery2, &number_of_devices);
     if(number_of_devices == 0)
         return false;
-    FDwfDeviceOpen(number_of_devices, &analog_handle);
+    FDwfDeviceOpen(number_of_devices - 1, &analog_handle);
     DWFERC rec;
     FDwfGetLastError(&rec);
     if(rec != dwfercNoErc)
         return false;
-    FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
     FDwfDeviceCloseAll();
     return true;
 }
@@ -288,8 +287,14 @@ void Backend::runMeasurement(double const frequency)
     FDwfDeviceAutoConfigureSet(analog_handle, 0);
     FDwfDeviceReset(analog_handle);
 
+    FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
+    qDebug() << max_freq;
+
     // Defualt hold inital voltage
     FDwfAnalogOutIdleSet(analog_handle, CHANNEL_BOTH, DwfAnalogOutIdleInitial);
+
+    // Set Node carrier
+    FDwfAnalogOutNodeEnableSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, true);
 
     // Wait to 0
     FDwfAnalogOutWaitSet(analog_handle, CHANNEL_BOTH, 0.0);
@@ -298,18 +303,41 @@ void Backend::runMeasurement(double const frequency)
     FDwfAnalogOutRepeatSet(analog_handle, CHANNEL_BOTH, repeat_times);
 
     // Custom function
-    FDwfAnalogOutNodeEnableSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, true);
     FDwfAnalogOutNodeFunctionSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, funcCustom);
 
+    max_freq = max_freq/10.0;
     // Frequency set to max
-    FDwfAnalogOutFrequencySet(analog_handle, CHANNEL_BOTH, max_freq);
+    FDwfAnalogOutNodeFrequencySet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, max_freq);
 
     // Set bias voltage to 0
-    FDwfAnalogOutOffsetSet(analog_handle, CHANNEL_BOTH, 0.0);
+    FDwfAnalogOutNodeOffsetSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, 0.0);
 
     // Set amplitude voltage
-    FDwfAnalogOutAmplitudeSet(analog_handle, CHANNEL0, (double)amplitude / VOLTS_IN_MILIVOLT);
-    FDwfAnalogOutAmplitudeSet(analog_handle, CHANNEL1, TRIGGER_AMPLITUDE);
+    FDwfAnalogOutNodeAmplitudeSet(analog_handle, CHANNEL0, AnalogOutNodeCarrier, (double)amplitude / VOLTS_IN_MILIVOLT);
+    FDwfAnalogOutNodeAmplitudeSet(analog_handle, CHANNEL1, AnalogOutNodeCarrier, TRIGGER_AMPLITUDE);
+
+
+
+
+    emit progress(5);
+    // generate signals
+    Signal signal = generateSignal();
+    Signal trigger_signal = generateTriggerSignal();
+
+    // Set run time
+    FDwfAnalogOutRunSet(analog_handle, CHANNEL_BOTH, (double)signal.count / max_freq );
+
+    // Set master/slave synchronization
+    FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
+
+    // set signals and remember to free memory
+    setSignal(CHANNEL0, signal);
+    setSignal(CHANNEL1, trigger_signal);
+
+
+    char error_message_buffer[256];
+    FDwfGetLastErrorMsg(error_message_buffer);
+    emit fail("Analog Discovery error: " + QString::fromLocal8Bit(error_message_buffer));
 
     FDwfGetLastError(&rec);
     if(rec != dwfercNoErc)
@@ -320,20 +348,6 @@ void Backend::runMeasurement(double const frequency)
         return;
     }
 
-    emit progress(5);
-    // generate signals
-    Signal signal = generateSignal();
-    Signal trigger_signal = generateTriggerSignal();
-
-    // Set run time
-    FDwfAnalogOutRunSet(analog_handle, CHANNEL_BOTH, (double)signal.count / max_freq );
-
-    // set signals and free memory
-    setSignal(CHANNEL0, signal);
-    setSignal(CHANNEL1, trigger_signal);
-
-    delete[] signal.samples;
-    delete[] trigger_signal.samples;
 
     // Send setup to keithley
     ViUInt32 retCount;
@@ -345,37 +359,38 @@ void Backend::runMeasurement(double const frequency)
         return;
     }
     viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 5000);
-    QString tsp_command = QString(
+    std::string tsp_command = std::string(
     // -- resetowanie i ustawienia początkowe
-    "reset()"
     "dmm.reset()"
-    "dmm.digitize.func = dmm.FUNC_DC_CURRENT"
-    "dmm.digitize.range = 0.000001"
-    "dmm.digitize.samplerate = 1000000"
-    "dmm.measure.nplc = 0.0005"
+    "dmm.digitize.func = dmm.FUNC_DIGITIZE_CURRENT\n"
+    "dmm.digitize.range = 0.000001\n"
+    "dmm.digitize.samplerate = 1000000\n"
+    // "dmm.measure.nplc = 0.0005\n"
 
     //-- wyswietlanie informacji
     "display.clear()"
-    "display.changescreen(display.SCREEN_USER_SWIPE)"
-    "display.settext(display.TEXT1, \"Pomiar trwa\")"
-    "display.settext(display.TEXT2, \"Nie dotykej\")"
+    "display.changescreen(display.SCREEN_USER_SWIPE)\n"
+    "display.settext(display.TEXT1, \"Pomiar trwa\")\n"
+    "display.settext(display.TEXT2, \"Nie dotykej\")\n"
 
     //--     zmienic na liczba pomairow + 1
-    "defbuffer1.capacity = 100000"
-    "defbuffer1.clear()"
-    "trigger.clear()"
-    "trigger.model.load(\"Empty\")"
-    "trigger.extin.edge = trigger.EDGE_RISING"
+    "defbuffer1.capacity = 100000\n"
+    "defbuffer1.clear()\n"
+    "dmm.digitize.read()"
+    "trigger.clear()\n"
+    "trigger.model.load(\"Empty\")\n"
+    "trigger.extin.edge = trigger.EDGE_RISING\n"
 
     //-- Trigger zewnetrzny
     // 2 micro sekundy minimum między triggerami
-    "trigger.model.setblock(1, trigger.BLOCK_WAIT, trigger.EVENT_EXTERNAL)"
-    "trigger.model.setblock(2, trigger.BLOCK_MEASURE_DIGITIZE, defbuffer1, 1)"
-    "trigger.model.setblock(3, trigger.BLOCK_BRANCH_COUNTER, $$$$$$$$$$, 1)"
+    "trigger.model.setblock(1, trigger.BLOCK_WAIT, trigger.EVENT_EXTERNAL)\n"
+    "trigger.model.setblock(2, trigger.BLOCK_MEASURE_DIGITIZE, defbuffer1, 1)\n"
+    "trigger.model.setblock(3, trigger.BLOCK_BRANCH_COUNTER, 100, 1)\n"
     //-- Start triggera
-    "trigger.model.initiate() ");
+    "trigger.model.initiate() \n"
+    );
 
-    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
+    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.c_str()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
     {
         emit fail("Nie udalo sie przeslac skryptu na keythleya");
@@ -383,38 +398,53 @@ void Backend::runMeasurement(double const frequency)
     }
 
     // Run analog signal
-    FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
-    FDwfAnalogOutConfigure(analog_handle, CHANNEL_BOTH, true);
+    FDwfAnalogOutConfigure(analog_handle, CHANNEL1, true);
     emit progress(10);
 
 
     // Download results keythley
-    tsp_command = QString(
-        "format.data = format.REAL64"
-        "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)"
+    tsp_command = std::string(
+        "display.clear()"
+        "format.data = format.REAL64\n"
+        "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)\n"
     );
-    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.constData()), tsp_command.size(), &retCount);
-    if (keythley_status != VI_SUCCESS)
-    {
-        emit fail("Nie udalo sie przeslac skryptu odczytywania na keythleya");
-        return;
-    }
 
-    ViChar *buffer = new ViChar[4096 * 4];
-    keythley_status = viRead(keythley_handle, reinterpret_cast<ViBuf>(buffer), sizeof(buffer) - 1, &retCount);
-    if (keythley_status != VI_SUCCESS && keythley_status != VI_SUCCESS_MAX_CNT)
-    {
-        emit fail("Nie udało się odczytać odpowiedzi z Keythleya");
-        return;
-    }
-    buffer[retCount] = '\0';  // Null-terminate the string
+
+
+    char buffer[4096 * 8];
+    keythley_status = viQueryf(keythley_handle, reinterpret_cast<ViConstString>(tsp_command.c_str()), "%t", buffer);
+    // keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.c_str()), tsp_command.size(), &retCount);
+    // if (keythley_status != VI_SUCCESS)
+    // {
+    //     emit fail("Nie udalo sie przeslac skryptu odczytywania na keythleya");
+    //     return;
+    // }
+
+    // unsigned char buffer[4096*5];
+    // keythley_status = viRead(keythley_handle, buffer, 4096*5 -1, &retCount);
+    // if (keythley_status < VI_SUCCESS)
+    // {
+    //     emit fail("Nie udało się odczytać odpowiedzi z Keythleya");
+    //     viClose(keythley_handle);
+    //     return;
+    // }
+    // buffer[retCount] = 0;  // Null-terminate the string
     qDebug() << "Instrument response: " << buffer;
+    // QString ret = "";
+    // for (int var = 0; var < retCount; ++var)
+    // {
+    //     ret.append(*(char*)(void*)(&buffer[var]));
+    // }
+    // qDebug() << ret;
 
     // Save results
     emit progress(90);
-    QFile plik_wyniki = QFile(file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString()));
-    if(!plik_wyniki.open(QIODevice::Text | QIODevice::WriteOnly))
+    QString likalizacja_pliku = file_location;
+    likalizacja_pliku = likalizacja_pliku.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-"));
+    QFile plik_wyniki = QFile(likalizacja_pliku);
+    if(!plik_wyniki.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
     {
+        qDebug() << plik_wyniki.filesystemFileName();
         emit fail("Nie udało się otworzyć pliku: " + plik_wyniki.errorString());
         return;
     }
@@ -434,12 +464,13 @@ void Backend::runMeasurement(double const frequency)
     if(plik_wyniki.write(buffer) != retCount)
     {
         emit fail("Nie udało się zapisać całego pliku :< ");
-        return;
     }
 
 
     plik_wyniki.close();
-    delete[] buffer;
+    // delete[] buffer;
+    delete[] signal.samples;
+    delete[] trigger_signal.samples;
 
 
     // Display plot with results preview - close all connections
@@ -453,6 +484,6 @@ void Backend::setSignal(int channel, Signal& signal)
     FDwfAnalogOutNodeDataInfo(analog_handle, channel, AnalogOutNodeCarrier, &samples_count_min, &samples_count_max);
     // SAnity is lost RIP
     qDebug() << "Possible samples: " << samples_count_min << " === " << samples_count_max << "   actual: " << signal.count;
-    FDwfAnalogOutNodeDataSet(analog_handle, channel, AnalogOutNodeCarrier, signal.samples, signal.count);
+    FDwfAnalogOutNodeDataSet(analog_handle, channel, AnalogOutNodeCarrier, signal.samples, signal.count);    
 }
 

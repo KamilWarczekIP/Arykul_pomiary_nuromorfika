@@ -25,6 +25,11 @@
      <layout class="QHBoxLayout" name="horizontalLayout_4">
       <item>
        <widget class="QLabel" name="label">
+        <property name="font">
+         <font>
+          <pointsize>11</pointsize>
+         </font>
+        </property>
         <property name="text">
          <string>Podgląd sygnału</string>
         </property>
@@ -45,8 +50,13 @@
       </item>
       <item>
        <widget class="QLabel" name="label_czas_sygnalu">
+        <property name="font">
+         <font>
+          <pointsize>13</pointsize>
+         </font>
+        </property>
         <property name="text">
-         <string>0</string>
+         <string>Czas pomiaru xxx</string>
         </property>
        </widget>
       </item>
@@ -117,6 +127,11 @@
             <height>50</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="alignment">
            <set>Qt::AlignmentFlag::AlignCenter</set>
           </property>
@@ -172,6 +187,11 @@
             <width>300</width>
             <height>50</height>
            </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
           </property>
           <property name="alignment">
            <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -229,6 +249,11 @@
             <height>50</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="alignment">
            <set>Qt::AlignmentFlag::AlignCenter</set>
           </property>
@@ -285,6 +310,11 @@
             <height>50</height>
            </size>
           </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+           </font>
+          </property>
           <property name="alignment">
            <set>Qt::AlignmentFlag::AlignCenter</set>
           </property>
@@ -339,6 +369,9 @@
      <layout class="QHBoxLayout" name="horizontalLayout" stretch="3,3,2">
       <item>
        <layout class="QFormLayout" name="formLayout">
+        <property name="formAlignment">
+         <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
+        </property>
         <item row="2" column="1">
          <widget class="QSpinBox" name="spinBox_liczba_pomiarow">
           <property name="maximumSize">
