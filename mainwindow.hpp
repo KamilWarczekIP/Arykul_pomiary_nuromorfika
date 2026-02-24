@@ -53,9 +53,13 @@ private slots:
 
     void on_pushButton_lokalizacja_pliku_clicked();
 
+    void on_pushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     void recalculateLimits();
+    void loadAnalogDataForFirstTime();
+    bool analog_data_read_already = false;
 
     QTimer* aparatura_timer;
 };

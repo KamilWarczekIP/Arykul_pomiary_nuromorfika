@@ -41,6 +41,11 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::sprawdzPopiecieAparatury()
 {
     bool analog_status = backend().analogDiscoveryStatus();
+    if (analog_status && !analog_data_read_already)
+    {
+        analog_data_read_already = true;
+        loadAnalogDataForFirstTime();
+    }
     bool keythley_status = backend().keythleyStatus();
     QString lokalizacja = backend().file_location.left(46);
     if(backend().file_location.size() > 42)
@@ -61,17 +66,35 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::loadAnalogDataForFirstTime()
+{
+    ui->label_ostrzeenie->hide();
+    ui->pushButton_ostrzezenie->hide();
+
+    backend().analogDiscoveryfetchMaxSamples();
+    backend().analogDiscoveryfetchMaxWaitTime();
+    backend().analogDiscoveryfetchMaxRepeat();
+    ui->spinBox_liczba_pomiarow->setMaximum(backend().analogDiscoveryMaxRepeat());
+}
+
 void MainWindow::recalculateSignalTime()
 {
     ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b>" + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs</b>");
+    if(backend().signalSampleCount() >= backend().analogDiscoveryMaxSamples())
+    {
+        ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b> (za długo)" + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs<b>");
+    }
 }
 
 void MainWindow::recalculateLimits()
 {
     ui->spinBox_czest->setMaximum(1.0 / backend().getSignalTimeInSeconds());
-    backend().E = (backend().MICROSEC_IN_SEC / ui->spinBox_czest->value()) - backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC;
+    backend().wait_time = (backend().MICROSEC_IN_SEC / ui->spinBox_czest->value()) - backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC;
 
-    ui->spinBox_tigger_offset->setMaximum(ui->spinBox_D->value() - 1);
+    if(backend().measurement_type == Backend::MeasurementType::Impulse_pomiar_scalony)
+        ui->spinBox_tigger_offset->setMaximum(ui->spinBox_B->value() - 1);
+    else
+        ui->spinBox_tigger_offset->setMaximum(ui->spinBox_D->value() - 1);
     emit update_preview();
 }
 
@@ -82,7 +105,6 @@ void MainWindow::resetAfterFail(QString message)
     msgBox.setInformativeText(message);
     msgBox.setStandardButtons(QMessageBox::Ok);
     int ret = msgBox.exec();
-
     ui->progressBar->setValue(0);
 }
 
@@ -122,20 +144,36 @@ void MainWindow::on_spinBox_czest_valueChanged(int arg1)
 
 void MainWindow::on_comboBox_currentIndexChanged(int index)
 {
-    switch (index) {
+    switch (index)
+    {
     case 0:
         backend().measurement_type = Backend::MeasurementType::Impulse;
         ui->spinBox_C->setEnabled(false);
+        ui->spinBox_D->setEnabled(true);
         break;
     case 1:
-        backend().measurement_type = Backend::MeasurementType::ZygZag;
-        ui->spinBox_C->setEnabled(true);
+        backend().measurement_type = Backend::MeasurementType::Impulse_odwrocony;
+        ui->spinBox_C->setEnabled(false);
+        ui->spinBox_D->setEnabled(true);
         break;
     case 2:
+        backend().measurement_type = Backend::MeasurementType::Impulse_pomiar_scalony;
+        ui->spinBox_D->setEnabled(false);
+        ui->spinBox_C->setEnabled(false);
+        break;
+    case 3:
+        backend().measurement_type = Backend::MeasurementType::ZygZag;
+        ui->spinBox_C->setEnabled(true);
+        ui->spinBox_D->setEnabled(true);
+        break;
+    case 4:
         backend().measurement_type = Backend::MeasurementType::ZygZag_Odwrocony;
         ui->spinBox_C->setEnabled(true);
+        ui->spinBox_D->setEnabled(true);
         break;
     }
+
+
     recalculateLimits();
 }
 
@@ -212,5 +250,11 @@ void MainWindow::on_pushButton_lokalizacja_pliku_clicked()
         );
     if(nowa_lokalizacja != "")
         backend().file_location = nowa_lokalizacja;
+}
+
+
+void MainWindow::on_pushButton_clicked()
+{
+    backend().outputPreview();
 }
 

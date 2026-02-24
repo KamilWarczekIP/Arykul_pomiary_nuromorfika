@@ -23,7 +23,8 @@ void QPlot::paintEvent(QPaintEvent* event)
     int center = height() / 2;
     constexpr const int LETTER_WIDTH = 5;
     constexpr const int LETTER_HEIGHT = 13;
-    if(backend().measurement_type == Backend::ZygZag_Odwrocony)
+    if(backend().measurement_type == Backend::ZygZag_Odwrocony ||
+       backend().measurement_type == Backend::Impulse_odwrocony )
     {
         std::swap(top, bottom);
     }
@@ -48,6 +49,8 @@ void QPlot::paintEvent(QPaintEvent* event)
     switch (backend().measurement_type)
     {
     case Backend::Impulse:
+    case Backend::Impulse_odwrocony:
+    case Backend::Impulse_pomiar_scalony:
         break;
     case Backend::ZygZag:
     case Backend::ZygZag_Odwrocony:
@@ -73,30 +76,43 @@ void QPlot::paintEvent(QPaintEvent* event)
     painter.drawLine(painter_x_position, center, painter_x_position + backend().A, center);
     painter_x_position += backend().A;
 
-    int readout_height = center - ((double)backend().readout_amplitude / backend().amplitude) * center;
-    painter.setPen(Qt::white);
-    painter.drawLine(painter_x_position, center, painter_x_position, readout_height);
-    painter.setPen(Qt::yellow);
-    if(backend().D > LETTER_WIDTH * 2)
-        painter.drawText(painter_x_position + backend().D / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "D");
-    painter.drawLine(painter_x_position, readout_height, painter_x_position + backend().D, readout_height);
-    painter.setPen(Qt::red);
 
+    //Rysowanie linii triggera
     QPen trigger_line = QPen();
+    painter.setPen(Qt::red);
     trigger_line.setColor(Qt::red);
     trigger_line.setWidth(2);
     painter.setPen(trigger_line);
-    //Rysowanie linii triggera
-    painter.drawText(painter_x_position + backend().trigger_offset + LETTER_WIDTH, height() - LETTER_HEIGHT, "TRIG");
+    if(backend().measurement_type == Backend::MeasurementType::Impulse_pomiar_scalony)
+    {
+        painter.drawText(painter_x_position + backend().trigger_offset - backend().A - backend().B  + LETTER_WIDTH, height() - LETTER_HEIGHT, "TRIG");
+        painter.drawLine(painter_x_position + backend().trigger_offset - backend().A - backend().B, top, painter_x_position + backend().trigger_offset - backend().A - backend().B, bottom);
+    }
+    else
+    {
+        painter.drawText(painter_x_position + backend().trigger_offset + LETTER_WIDTH, height() - LETTER_HEIGHT, "TRIG");
+        painter.drawLine(painter_x_position + backend().trigger_offset, top, painter_x_position + backend().trigger_offset, bottom);
+    }
 
-    painter.drawLine(painter_x_position + backend().trigger_offset, top, painter_x_position + backend().trigger_offset, bottom);
-    painter_x_position += backend().D;
-
+// Rysowanie odczytu
+    if(backend().measurement_type != Backend::MeasurementType::Impulse_pomiar_scalony)
+    {
+        int readout_height = center - ((double)backend().readout_amplitude / backend().amplitude) * center;
+        painter.setPen(Qt::white);
+        painter.drawLine(painter_x_position, center, painter_x_position, readout_height);
+        painter.setPen(Qt::yellow);
+        if(backend().D > LETTER_WIDTH * 2)
+            painter.drawText(painter_x_position + backend().D / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "D");
+        painter.drawLine(painter_x_position, readout_height, painter_x_position + backend().D, readout_height);
+        painter_x_position += backend().D;
+        painter.setPen(Qt::white);
+        painter.drawLine(painter_x_position, readout_height, painter_x_position, center);
+    }
     painter.setPen(Qt::white);
-    painter.drawLine(painter_x_position, readout_height, painter_x_position, center);
-    if(backend().E > LETTER_WIDTH)
-        painter.drawText(painter_x_position + backend().E / 2 - LETTER_WIDTH, center + LETTER_HEIGHT, "E");
-    painter.drawLine(painter_x_position, center, painter_x_position + backend().E, center);
+
+    if(backend().wait_time > LETTER_WIDTH * 7)
+        painter.drawText(painter_x_position + backend().wait_time / 2 - LETTER_WIDTH * 3, center + LETTER_HEIGHT, "WAIT TIME");
+    painter.drawLine(painter_x_position, center, painter_x_position + backend().wait_time, center);
 
 
 
