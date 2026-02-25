@@ -4,6 +4,7 @@
 #include <qdebug.h>
 #include <dwf.h>
 #include <visa.h>
+#include <QThread>
 
 static constexpr int CHANNEL0 = 0;
 static constexpr int CHANNEL1 = 1;
@@ -22,6 +23,7 @@ Backend::Backend(QObject *parent)
     , amplitude(1000)
     , readout_amplitude(50)
     , repeat_times(10)
+    , trigger_offset(0)
     , max_freq(1000000.0) // 10 MHz
     , min_freq(0.0)
     , defaultRM(VI_NULL)
@@ -37,6 +39,15 @@ Backend::Backend(QObject *parent)
     status = viOpenDefaultRM(&defaultRM);
     if (status != VI_SUCCESS)
         qDebug() << "Problem z managerem zasobów VISA32";
+
+    QFile params = QFile(PARAMETER_AUTOSAVE_FILENAME);
+    if(params.open(QIODevice::OpenModeFlag::ReadOnly | QIODevice::OpenModeFlag::ExistingOnly))
+    {
+        QDataStream stream(&params);
+        stream.setVersion(QDataStream::Qt_6_0);
+        stream >> A >> B >> C >> D >> trigger_offset >> wait_time >> measurement_type >> amplitude >> readout_amplitude >> repeat_times >> filename_suffix >> file_location;
+    }
+    params.close();
 }
 
 Backend::~Backend()
@@ -44,6 +55,15 @@ Backend::~Backend()
     FDwfDeviceCloseAll();
     viClose(keythley_handle);
     viClose(defaultRM);
+
+    QFile params = QFile(PARAMETER_AUTOSAVE_FILENAME);
+    if(params.open(QIODevice::OpenModeFlag::WriteOnly | QIODevice::OpenModeFlag::Truncate))
+    {
+        QDataStream stream(&params);
+        stream.setVersion(QDataStream::Qt_6_0);
+        stream << A << B << C << D << trigger_offset << wait_time << measurement_type << amplitude << readout_amplitude << repeat_times << filename_suffix << file_location;
+    }
+    params.close();
 }
 
 
@@ -149,7 +169,9 @@ double Backend::analogDiscoveryMaxWaitTime()
 void Backend::outputPreview()
 {
     Signal sig = generateSignal();
+    Signal trig = generateTriggerSignal();
     QString signal_string = "";
+    QString trigger_string = "";
     for (size_t index = 0; index < sig.count; index++)
     {
         if(sig.samples[index] == 1.0)
@@ -159,9 +181,12 @@ void Backend::outputPreview()
         else if(sig.samples[index] != 0.0)
             sig.samples[index] = -(double)readout_amplitude / VOLTS_IN_MILIVOLT;
         signal_string += QString::number(sig.samples[index]) + ", ";
+        trigger_string += QString::number(trig.samples[index]) + ", ";
     }
     qDebug() << signal_string;
+    qDebug() << trigger_string;
     qDebug() << "SAMPLES: " << sig.count;
+    qDebug() << "TRIG OFFSET: " << trigger_offset;
     qDebug() << "WAIT TIME: " << wait_time;
     qDebug() << "ALL FREQ. CALC.: " << getCalculatedFrequencyOfExcitation();
     qDebug() << "FILE: " << file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-"));
@@ -202,10 +227,21 @@ Signal Backend::generateTriggerSignal()
     signal.samples = new double[signal.count];
 
     size_t offset_index = 0;
-    if(measurement_type == Impulse)
+    switch(measurement_type)
+    {
+    case ZygZag:
+    case ZygZag_Odwrocony:
+        offset_index = B_samples + C_samples;
+    case Impulse:
+    case Impulse_odwrocony:
         offset_index = A_samples * 2 + B_samples;
-    else
-        offset_index = A_samples * 2 + B_samples * 2 + C_samples;
+        break;
+    case Impulse_pomiar_scalony:
+        offset_index += A_samples;
+        break;
+    }
+
+
 
 
     for(size_t index = 0; index < offset_index; index++)
@@ -213,7 +249,8 @@ Signal Backend::generateTriggerSignal()
         signal.samples[index] = 0.0;
     }
 
-    for(size_t index = 0; index < D_samples; index++)
+    int trigger_length = measurement_type == Impulse_pomiar_scalony ? B_samples : D_samples;
+    for(size_t index = 0; index < trigger_length; index++)
     {
         signal.samples[index + offset_index] = 1.0;
     }
@@ -222,6 +259,10 @@ Signal Backend::generateTriggerSignal()
     for(size_t index = 0; index < trigger_offset_samples; index++)
     {
         signal.samples[index + offset_index] = 0.0;
+    }
+    for(size_t index = offset_index + trigger_length; index < signal.count; index++)
+    {
+        signal.samples[index] = 0.0;
     }
     return signal;
 }
@@ -457,7 +498,7 @@ void Backend::runMeasurement(double const frequency)
     "display.settext(display.TEXT2, \"Nie dotykej\")\n"
 
     //--     zmienic na liczba pomairow + 1
-    "defbuffer1.capacity = %1\n"
+    "defbuffer1.capacity = %1 + 1\n"
     "defbuffer1.clear()\n"
     "dmm.digitize.read()" //TODO -remove
     "trigger.clear()\n"
@@ -484,21 +525,66 @@ void Backend::runMeasurement(double const frequency)
     FDwfAnalogOutConfigure(analog_handle, CHANNEL1, true);
     emit progress(10);
 
+    this->thread()->usleep(MICROSEC_IN_SEC * (getSignalTimeInSeconds() + ((double)wait_time / MICROSEC_IN_SEC)) * repeat_times);
+
 
     // Download results keythley
     tsp_command = QString(
         "display.clear()"
-        "format.data = format.REAL64\n"
+        "format.asciiprecision = 16\n"
+        "format.data = format.ASCII\n"
+        // "format.byteorder = format.LITTLEENDIAN"
+        // "format.data = format.REAL64\n"
         "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)\n"
     );
 
+    emit progress(80);
+    //Przygotowanie plików do zapisu
+    QString czas_pomiaru = QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-");
+    QString likalizacja_pliku_wyniki = file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    QFile plik_wyniki = QFile(likalizacja_pliku_wyniki);
+    if(!plik_wyniki.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
+    {
+        delete[] signal.samples;
+        delete[] trigger_signal.samples;
+        qDebug() << plik_wyniki.filesystemFileName();
+        emit fail("Nie udało się otworzyć pliku: " + plik_wyniki.errorString());
+        return;
+    }
+    emit progress(85);
+    QString likalizacja_pliku_parametry = file_location.append("/parametryPomiaru-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    QFile plik_parametry = QFile(likalizacja_pliku_parametry);
+    if(!plik_parametry.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
+    {
+        delete[] signal.samples;
+        delete[] trigger_signal.samples;
+        emit fail("Nie udało się otworzyć pliku: " + plik_parametry.errorString());
+        return;
+    }
 
+    QString measurement_parameters = QString("A [us], %1 \n").arg(A);
+    measurement_parameters += QString("B [us], %1 \n").arg(B);
+    measurement_parameters += QString("C [us], %1 \n").arg(C);
+    measurement_parameters += QString("D [us], %1 \n").arg(D);
+    measurement_parameters += QString("WAIT [us], %1 \n").arg(wait_time);
+    measurement_parameters += QString("Impulse Type, %1 \n").arg(getMeasurementTypeName());
+    measurement_parameters += QString("Amplitude [mV], %1 \n").arg(amplitude);
+    measurement_parameters += QString("Readout amplitude [mV], %1 \n").arg(readout_amplitude);
+    measurement_parameters += QString("Repat times, %1 \n").arg(repeat_times);
+    measurement_parameters += QString("Frequency set, %1 \n").arg(frequency);
+    measurement_parameters += QString("Frequency calculated, %1 \n").arg(getCalculatedFrequencyOfExcitation());
+    plik_parametry.write(measurement_parameters.toLocal8Bit());
+    plik_parametry.close();
 
-    char* buffer = new char[128 * repeat_times];
+    // Powinno być 33 bajty na jeden rekord
+    char* buffer = new char[64 * repeat_times];
     keythley_status = viQueryf(keythley_handle, reinterpret_cast<ViConstString>(tsp_command.toStdString().c_str()), "%t", buffer);
     // keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.c_str()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
     {
+        delete[] buffer;
+        delete[] signal.samples;
+        delete[] trigger_signal.samples;
         emit fail("Nie udalo sie przeslac skryptu odczytywania na keythleya");
         return;
     }
@@ -522,30 +608,11 @@ void Backend::runMeasurement(double const frequency)
 
     // Save results
     emit progress(90);
-    QString likalizacja_pliku = file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-"));
-    QFile plik_wyniki = QFile(likalizacja_pliku);
-    if(!plik_wyniki.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
-    {
-        qDebug() << plik_wyniki.filesystemFileName();
-        emit fail("Nie udało się otworzyć pliku: " + plik_wyniki.errorString());
-        return;
-    }
-
-    QString measurement_parameters = QString("A [us], %1 \n").arg(A);
-    measurement_parameters += QString("B [us], %1 \n").arg(B);
-    measurement_parameters += QString("C [us], %1 \n").arg(C);
-    measurement_parameters += QString("D [us], %1 \n").arg(D);
-    measurement_parameters += QString("WAIT [us], %1 \n").arg(wait_time);
-    measurement_parameters += QString("Impulse Type, %1 \n").arg(getMeasurementTypeName());
-    measurement_parameters += QString("Amplitude [mV], %1 \n").arg(amplitude);
-    measurement_parameters += QString("Readout amplitude [mV], %1 \n").arg(readout_amplitude);
-    measurement_parameters += QString("Repat times, %1 \n").arg(repeat_times);
-    measurement_parameters += QString("Frequency set, %1 \n").arg(frequency);
-    measurement_parameters += QString("Frequency calculated, %1 \n").arg(getCalculatedFrequencyOfExcitation());
-    plik_wyniki.write(measurement_parameters.toLocal8Bit());
-
     if(plik_wyniki.write(buffer) != retCount)
     {
+        delete[] buffer;
+        delete[] signal.samples;
+        delete[] trigger_signal.samples;
         emit fail("Nie udało się zapisać całego pliku :< ");
     }
 

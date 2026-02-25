@@ -84,6 +84,8 @@ private:
     unsigned long defaultRM;  // Resource manager
     unsigned long keythley_handle;   // DMM6500
     std::string visa_address_keythley;
+
+    QString PARAMETER_AUTOSAVE_FILENAME = "parameters.jpx";
 };
 
 struct BackendAccess

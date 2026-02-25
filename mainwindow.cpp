@@ -30,12 +30,13 @@ MainWindow::MainWindow(QWidget *parent)
     ui->spinBox_B->setValue(backend().B);
     ui->spinBox_C->setValue(backend().C);
     ui->spinBox_D->setValue(backend().D);
+    ui->spinBox_tigger_offset->setValue(backend().trigger_offset);
+    ui->spinBox_tigger_offset->setMinimum(0);
+    ui->lineEdit_nazwa->setText(backend().filename_suffix);
     ui->spinBox_liczba_pomiarow->setValue(backend().repeat_times);
-    ui->spinBox_C->setEnabled(backend().measurement_type != Backend::Impulse);
     ui->comboBox->setCurrentIndex((int)backend().measurement_type);
-
     recalculateLimits();
-    ui->spinBox_czest->setValue(1.0 / backend().getSignalTimeInSeconds());
+    ui->pushButton_max_czest->click();
 }
 
 void MainWindow::sprawdzPopiecieAparatury()
@@ -79,10 +80,16 @@ void MainWindow::loadAnalogDataForFirstTime()
 
 void MainWindow::recalculateSignalTime()
 {
-    ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b>" + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs</b>");
+
     if(backend().signalSampleCount() >= backend().analogDiscoveryMaxSamples())
     {
-        ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b> (za długo)" + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs<b>");
+        ui->label_czas_sygnalu->setStyleSheet("color: red;");
+        ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b> (za długo) " + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs<b>");
+    }
+    else
+    {
+        ui->label_czas_sygnalu->setText("Czas trwania sygnału: <b>" + QString::number(backend().getSignalTimeInSeconds() * backend().MICROSEC_IN_SEC) + " μs</b>");
+        ui->label_czas_sygnalu->setStyleSheet("");
     }
 }
 
