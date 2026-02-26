@@ -9,7 +9,7 @@ struct BackendAccess;
 struct Signal
 {
     double* samples;
-    size_t count;
+    int count;
 };
 
 class Backend : public QObject
@@ -80,7 +80,7 @@ private:
     double analog_discovery_max_wait = 1.0;
     static constexpr double GENERATION_FREQ = 1000000; // ~1 MHz
     static constexpr uint VOLTS_IN_MILIVOLT = 1000;
-    static constexpr double TRIGGER_AMPLITUDE = 4.5;
+    static constexpr double TRIGGER_AMPLITUDE = 4.8;
     unsigned long defaultRM;  // Resource manager
     unsigned long keythley_handle;   // DMM6500
     std::string visa_address_keythley;

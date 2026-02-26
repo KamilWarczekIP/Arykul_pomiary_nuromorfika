@@ -63,5 +63,7 @@ private:
     bool analog_data_read_already = false;
 
     QTimer* aparatura_timer;
+
+    void setUIEnabled(bool enabled);
 };
 #endif // MAINWINDOW_HPP

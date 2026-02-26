@@ -100,6 +100,10 @@ void Backend::analogDiscoveryfetchMaxSamples()
     FDwfDeviceOpen(-1, &analog_handle);
     int min;
     FDwfAnalogOutDataInfo(analog_handle, CHANNEL0, &min, &analog_discovery_max_samples);
+    double run_min, run_max;
+    FDwfAnalogOutRunInfo(analog_handle, CHANNEL0, &run_min, &run_max);
+    qDebug() << "Min RUNTIME:" << run_min;
+    qDebug() << "Max RUNTIME:" << run_max;
     FDwfDeviceCloseAll();
 }
 void Backend::analogDiscoveryfetchMaxRepeat()
@@ -108,6 +112,7 @@ void Backend::analogDiscoveryfetchMaxRepeat()
     FDwfDeviceOpen(-1, &analog_handle);
     int min;
     FDwfAnalogOutRepeatInfo(analog_handle, CHANNEL0, &min, &analog_discovery_max_repeat);
+    qDebug() << "Min repeat:" << min;
     FDwfDeviceCloseAll();
 
 }
@@ -117,6 +122,7 @@ void Backend::analogDiscoveryfetchMaxWaitTime()
     FDwfDeviceOpen(-1, &analog_handle);
     double min;
     FDwfAnalogOutWaitInfo(analog_handle, CHANNEL0, &min, &analog_discovery_max_wait);
+    qDebug() << "Min wait time:" << min;
     FDwfDeviceCloseAll();
 }
 
@@ -174,12 +180,12 @@ void Backend::outputPreview()
     QString trigger_string = "";
     for (size_t index = 0; index < sig.count; index++)
     {
-        if(sig.samples[index] == 1.0)
-            sig.samples[index] = (double)amplitude / VOLTS_IN_MILIVOLT;
-        else if(sig.samples[index] == -1.0)
-            sig.samples[index] = -(double)amplitude / VOLTS_IN_MILIVOLT;
-        else if(sig.samples[index] != 0.0)
-            sig.samples[index] = -(double)readout_amplitude / VOLTS_IN_MILIVOLT;
+        // if(sig.samples[index] == 1.0)
+        //     sig.samples[index] = (double)amplitude / VOLTS_IN_MILIVOLT;
+        // else if(sig.samples[index] == -1.0)
+        //     sig.samples[index] = -(double)amplitude / VOLTS_IN_MILIVOLT;
+        // else if(sig.samples[index] != 0.0)
+        //     sig.samples[index] = -(double)readout_amplitude / VOLTS_IN_MILIVOLT;
         signal_string += QString::number(sig.samples[index]) + ", ";
         trigger_string += QString::number(trig.samples[index]) + ", ";
     }
@@ -232,7 +238,8 @@ Signal Backend::generateTriggerSignal()
     {
     case ZygZag:
     case ZygZag_Odwrocony:
-        offset_index = B_samples + C_samples;
+        offset_index = A_samples * 2 + B_samples * 2 + C_samples;
+        break;
     case Impulse:
     case Impulse_odwrocony:
         offset_index = A_samples * 2 + B_samples;
@@ -271,7 +278,7 @@ Signal Backend::generateTriggerSignal()
 Signal Backend::generateSignal()
 {
     double normalized_readout_amplitude = (double)readout_amplitude / amplitude;
-    double normalized_amplitude = 1.0 * (measurement_type == ZygZag_Odwrocony || measurement_type == Impulse_odwrocony  ?  - 1.0 : 1.0);
+    double normalized_amplitude = ((measurement_type == ZygZag_Odwrocony || measurement_type == Impulse_odwrocony)  ?  -1.0 : 1.0);
 
     // Liczba sekund * częstotliwość = liczba sampli
     Signal signal;
@@ -394,10 +401,8 @@ void Backend::runMeasurement()
         return;
     }
     FDwfDeviceReset(analog_handle);
-    FDwfDeviceAutoConfigureSet(analog_handle, false);
     FDwfAnalogOutReset(analog_handle, CHANNEL_BOTH);
-
-    FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
+    FDwfDeviceAutoConfigureSet(analog_handle, false);
 
     // Defualt hold inital voltage
     FDwfAnalogOutIdleSet(analog_handle, CHANNEL_BOTH, DwfAnalogOutIdleOffset);
@@ -412,7 +417,8 @@ void Backend::runMeasurement()
         emit fail("Czas oczekiwania pomiędzy wymuszeniami zbyt długi. Zmniejsz częstotliwość wymuszeń.");
         return;
     }
-    FDwfAnalogOutWaitSet(analog_handle, CHANNEL_BOTH, calculated_wait_time);
+    FDwfAnalogOutWaitSet(analog_handle, CHANNEL0, calculated_wait_time);
+    FDwfAnalogOutWaitSet(analog_handle, CHANNEL1, calculated_wait_time);
 
     // Repat n times
     if(repeat_times > analogDiscoveryMaxRepeat())
@@ -425,8 +431,10 @@ void Backend::runMeasurement()
     // Custom function
     FDwfAnalogOutNodeFunctionSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, funcCustom);
 
-    // Frequency set to generation frequency
-    FDwfAnalogOutNodeFrequencySet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, GENERATION_FREQ);
+    // Frequency set to generation frequency - set to generation frequency times maximum frequency (derrived from signal duration) expressed in kHz
+    FDwfAnalogOutNodeFrequencySet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, GENERATION_FREQ / 1000.0 * (1.0 / backend().getSignalTimeInSeconds() / 1000.0));
+
+
 
     // Set bias voltage to 0
     FDwfAnalogOutNodeOffsetSet(analog_handle, CHANNEL_BOTH, AnalogOutNodeCarrier, 0.0);
@@ -451,20 +459,12 @@ void Backend::runMeasurement()
     emit progress(7);
     Signal trigger_signal = generateTriggerSignal();
 
-    // Set run time
-    FDwfAnalogOutRunSet(analog_handle, CHANNEL_BOTH, (double)signal.count / GENERATION_FREQ );
-
-
     // set signals and remember to free memory
     setSignal(CHANNEL0, signal);
     setSignal(CHANNEL1, trigger_signal);
 
-    // Set master/slave synchronization
-    FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
-
-    // char error_message_buffer[256];
-    // FDwfGetLastErrorMsg(error_message_buffer);
-    // emit fail("Analog Discovery error: " + QString::fromLocal8Bit(error_message_buffer));
+    // Set run time
+    FDwfAnalogOutRunSet(analog_handle, CHANNEL_BOTH, (double)signal.count / GENERATION_FREQ);
 
     FDwfGetLastError(&rec);
     if(rec != dwfercNoErc)
@@ -488,11 +488,14 @@ void Backend::runMeasurement()
     viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 1000);
     QString tsp_command = QString(
     // -- resetowanie i ustawienia początkowe
+    "trigger.model.abort()\n"
     "dmm.reset()"
     "dmm.digitize.func = dmm.FUNC_DIGITIZE_CURRENT\n"
     "dmm.digitize.range = 0.000001\n"
     "dmm.digitize.samplerate = 1000000\n"
     // "dmm.measure.nplc = 0.0005\n"
+    // "dmm.measure.func = dmm.FUNC_DC_CURRENT\n"
+    // "dmm.measure.range = 0.000001\n"
 
     //-- wyswietlanie informacji
     "display.clear()"
@@ -501,9 +504,9 @@ void Backend::runMeasurement()
     "display.settext(display.TEXT2, \"Nie dotykej\")\n"
 
     //--     zmienic na liczba pomairow + 1
-    "defbuffer1.capacity = %1 + 1\n"
+    "defbuffer1.capacity = %2\n"
     "defbuffer1.clear()\n"
-    "dmm.digitize.read()" //TODO -remove
+    // "dmm.digitize.read()"
     "trigger.clear()\n"
     "trigger.model.load(\"Empty\")\n"
     "trigger.extin.edge = trigger.EDGE_RISING\n"
@@ -515,7 +518,7 @@ void Backend::runMeasurement()
     "trigger.model.setblock(3, trigger.BLOCK_BRANCH_COUNTER, %1, 1)\n"
     //-- Start triggera
     "trigger.model.initiate() \n"
-    ).arg(repeat_times);
+    ).arg(repeat_times).arg(std::max(10U, repeat_times + 1));
 
     keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.toStdString().c_str()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
@@ -524,30 +527,34 @@ void Backend::runMeasurement()
         return;
     }
 
-    constexpr unsigned long STABLIZE_TIME = 5000;
-    this->thread()->usleep(STABLIZE_TIME);
+    // Waiting for samples transfer to compleate
+    constexpr unsigned long STABLIZE_TIME_NS = 100000;
+    QThread::sleep(std::chrono::nanoseconds(STABLIZE_TIME_NS));
 
     // Run analog signal
-    FDwfAnalogOutConfigure(analog_handle, CHANNEL1, true);
+    // FDwfAnalogOutConfigure(analog_handle, CHANNEL1, true);
+    FDwfAnalogOutConfigure(analog_handle, CHANNEL_BOTH, true);
     emit progress(10);
-    this->thread()->usleep((MICROSEC_IN_SEC * getSignalTimeInSeconds() + wait_time) * repeat_times + STABLIZE_TIME);
 
+    QThread::sleep(std::chrono::nanoseconds((long long) (1000.0 * (MICROSEC_IN_SEC * getSignalTimeInSeconds() + wait_time) * repeat_times + STABLIZE_TIME_NS)));
 
     // Download results keythley
     tsp_command = QString(
-        "display.clear()"
-        "format.asciiprecision = 16\n"
+        "display.clear()\n"
+        "beeper.beep(0.3, 2400)\n"
+        "format.asciiprecision = 6\n"
         "format.data = format.ASCII\n"
-        // "format.byteorder = format.LITTLEENDIAN"
-        // "format.data = format.REAL64\n"
-        "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.timestamps)\n"
+        "for x = 1, defbuffer1.n do\n"
+        "\tprintbuffer(x, x, defbuffer1.readings, defbuffer1.relativetimestamps)\n"
+        "end\n"
+        // "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.units, defbuffer1.relativetimestamps)\n"
     );
 
-    emit progress(80);
     //Przygotowanie plików do zapisu
+    emit progress(80);
     QString czas_pomiaru = QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-");
     QString likalizacja_pliku_wyniki = file_location;
-    likalizacja_pliku_wyniki.append("/wyniki-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    likalizacja_pliku_wyniki = likalizacja_pliku_wyniki.append("/wyniki-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
     QFile plik_wyniki = QFile(likalizacja_pliku_wyniki);
     if(!plik_wyniki.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
     {
@@ -559,7 +566,7 @@ void Backend::runMeasurement()
     }
     emit progress(85);
     QString likalizacja_pliku_parametry = file_location;
-    likalizacja_pliku_parametry.append("/parametryPomiaru-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    likalizacja_pliku_parametry = likalizacja_pliku_parametry.append("/parametryPomiaru-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
     QFile plik_parametry = QFile(likalizacja_pliku_parametry);
     if(!plik_parametry.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
     {
@@ -578,15 +585,15 @@ void Backend::runMeasurement()
     measurement_parameters += QString("Amplitude [mV], %1 \n").arg(amplitude);
     measurement_parameters += QString("Readout amplitude [mV], %1 \n").arg(readout_amplitude);
     measurement_parameters += QString("Repat times, %1 \n").arg(repeat_times);
-    // measurement_parameters += QString("Frequency set, %1 \n").arg(frequency);
-    measurement_parameters += QString("Frequency calculated, %1 \n").arg(getCalculatedFrequencyOfExcitation());
+    measurement_parameters += QString("Frequency of impulse calculated, %1 \n").arg(getCalculatedFrequencyOfExcitation());
+    measurement_parameters += QString("Frequency generated signal, %1 \n").arg(GENERATION_FREQ);
     plik_parametry.write(measurement_parameters.toLocal8Bit());
     plik_parametry.close();
 
-    // Powinno być 33 bajty na jeden rekord
+    emit progress(90);
+    // Powinno być 24 bajty na jeden rekord
     char* buffer = new char[64 * repeat_times];
     keythley_status = viQueryf(keythley_handle, reinterpret_cast<ViConstString>(tsp_command.toStdString().c_str()), "%t", buffer);
-    // keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.c_str()), tsp_command.size(), &retCount);
     if (keythley_status != VI_SUCCESS)
     {
         delete[] buffer;
@@ -596,25 +603,10 @@ void Backend::runMeasurement()
         return;
     }
 
-    // unsigned char buffer[4096*5];
-    // keythley_status = viRead(keythley_handle, buffer, 4096*5 -1, &retCount);
-    // if (keythley_status < VI_SUCCESS)
-    // {
-    //     emit fail("Nie udało się odczytać odpowiedzi z Keythleya");
-    //     viClose(keythley_handle);
-    //     return;
-    // }
     // buffer[retCount] = 0;  // Null-terminate the string
-    qDebug() << "Instrument response: " << buffer;
-    // QString ret = "";
-    // for (int var = 0; var < retCount; ++var)
-    // {
-    //     ret.append(*(char*)(void*)(&buffer[var]));
-    // }
-    // qDebug() << ret;
+    // qDebug() << "Instrument response: " << buffer;
 
     // Save results
-    emit progress(90);
     if(plik_wyniki.write(buffer) != retCount)
     {
         delete[] buffer;

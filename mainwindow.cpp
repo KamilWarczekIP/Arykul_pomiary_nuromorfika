@@ -40,6 +40,26 @@ MainWindow::MainWindow(QWidget *parent)
     ui->comboBox->setCurrentIndex((int)backend().measurement_type);
     recalculateLimits();
     ui->pushButton_max_czest->click();
+    setUIEnabled(false);
+    ui->spinBox_C->setEnabled(false);
+    ui->spinBox_D->setEnabled(false);
+}
+void MainWindow::setUIEnabled(bool enabled)
+{
+    ui->pushButton_max_czest->setEnabled(enabled);
+    ui->pushButton_lokalizacja_pliku->setEnabled(enabled);
+    ui->spinBox_A->setEnabled(enabled);
+    ui->spinBox_B->setEnabled(enabled);
+    ui->spinBox_C->setEnabled(enabled);
+    ui->spinBox_D->setEnabled(enabled);
+    ui->comboBox->setEnabled(enabled);
+    on_comboBox_currentIndexChanged(ui->comboBox->currentIndex());
+    ui->spinBox_czest->setEnabled(enabled);
+    ui->spinBox_amplituda->setEnabled(enabled);
+    ui->spinBox_amplituda_odczytu->setEnabled(enabled);
+    ui->spinBox_tigger_offset->setEnabled(enabled);
+    ui->spinBox_liczba_pomiarow->setEnabled(enabled);
+    ui->lineEdit_nazwa->setEnabled(enabled);
 }
 
 void MainWindow::sprawdzPopiecieAparatury()
@@ -49,6 +69,7 @@ void MainWindow::sprawdzPopiecieAparatury()
     {
         analog_data_read_already = true;
         loadAnalogDataForFirstTime();
+        setUIEnabled(true);
     }
     bool keythley_status = backend().keythleyStatus();
     QString lokalizacja = backend().file_location.left(46);
@@ -115,32 +136,18 @@ void MainWindow::resetAfterFail(QString message)
     msgBox.setInformativeText(message);
     msgBox.setStandardButtons(QMessageBox::Ok);
     int ret = msgBox.exec();
+    resetUI();
 }
 
 void MainWindow::resetUI()
 {
-    ui->pushButton_start->setEnabled(true);
+        setUIEnabled(true);
+        ui->pushButton_start->setText("START");
+        ui->progressBar->setValue(0);
+        ui->progressBar->setEnabled(false);
+        aparatura_timer->start();
+        ui->pushButton_start->setEnabled(true);
 
-    constexpr bool STATUS = true;
-    ui->pushButton_max_czest->setEnabled(STATUS);
-    ui->pushButton_lokalizacja_pliku->setEnabled(STATUS);
-    ui->spinBox_A->setEnabled(STATUS);
-    ui->spinBox_B->setEnabled(STATUS);
-    ui->spinBox_C->setEnabled(STATUS);
-    ui->spinBox_D->setEnabled(STATUS);
-    ui->comboBox->setEnabled(STATUS);
-    on_comboBox_currentIndexChanged(ui->comboBox->currentIndex());
-    ui->spinBox_czest->setEnabled(STATUS);
-    ui->spinBox_amplituda->setEnabled(STATUS);
-    ui->spinBox_amplituda_odczytu->setEnabled(STATUS);
-    ui->spinBox_tigger_offset->setEnabled(STATUS);
-    ui->spinBox_liczba_pomiarow->setEnabled(STATUS);
-    ui->lineEdit_nazwa->setEnabled(STATUS);
-
-    ui->pushButton_start->setText("START");
-    ui->progressBar->setValue(0);
-    ui->progressBar->setEnabled(false);
-    aparatura_timer->start();
 }
 
 void MainWindow::on_spinBox_A_valueChanged(int arg1)
@@ -242,16 +249,6 @@ void MainWindow::on_lineEdit_nazwa_textChanged(const QString &arg1)
 
 void MainWindow::on_pushButton_max_czest_clicked()
 {
-    // backend().max_freq = 10000000;
-    // Signal sig = backend().generateSignal();
-    // QString str = "";
-    // for (int var = 0; var < sig.count; ++var)
-    // {
-    //     str += QString::number(sig.samples[var]);
-    //     str += ", ";
-    // }
-    // qDebug() << str;
-
     ui->spinBox_czest->setValue(ui->spinBox_czest->maximum());
 }
 
@@ -265,25 +262,10 @@ void MainWindow::on_spinBox_tigger_offset_valueChanged(int arg1)
 
 void MainWindow::on_pushButton_start_clicked()
 {
+    setUIEnabled(false);
     aparatura_timer->stop();
     ui->pushButton_start->setEnabled(false);
     ui->progressBar->setEnabled(true);
-
-    constexpr bool STATUS = false;
-    ui->pushButton_max_czest->setEnabled(STATUS);
-    ui->pushButton_lokalizacja_pliku->setEnabled(STATUS);
-    ui->spinBox_A->setEnabled(STATUS);
-    ui->spinBox_B->setEnabled(STATUS);
-    ui->spinBox_C->setEnabled(STATUS);
-    ui->spinBox_D->setEnabled(STATUS);
-    ui->comboBox->setEnabled(STATUS);
-    ui->spinBox_czest->setEnabled(STATUS);
-    ui->spinBox_amplituda->setEnabled(STATUS);
-    ui->spinBox_amplituda_odczytu->setEnabled(STATUS);
-    ui->spinBox_tigger_offset->setEnabled(STATUS);
-    ui->spinBox_liczba_pomiarow->setEnabled(STATUS);
-    ui->lineEdit_nazwa->setEnabled(STATUS);
-
     ui->pushButton_start->setText("Czekej mierze...");
 }
 
