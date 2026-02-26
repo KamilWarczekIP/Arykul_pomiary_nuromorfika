@@ -16,6 +16,9 @@ MainWindow::MainWindow(QWidget *parent)
     QWidget* qplot = new QPlot(this);
     ui->centralwidget->layout()->replaceWidget(ui->widget, qplot);
     QObject::connect(&backend(), &Backend::progress, ui->progressBar, &QProgressBar::setValue);
+    QObject::connect(&backend(), &Backend::fail, this, &MainWindow::resetAfterFail);
+    QObject::connect(&backend(), &Backend::finishedMeasurement, this, &MainWindow::resetUI);
+    QObject::connect(ui->pushButton_start, &QPushButton::clicked, &backend(), &Backend::runMeasurement);
     QObject::connect(this, &MainWindow::update_preview, dynamic_cast<QPlot*>(qplot), &QPlot::repaint);
     QObject::connect(this, &MainWindow::update_preview, this, &MainWindow::recalculateSignalTime);
     setWindowTitle("Test neuromorfika");
@@ -57,7 +60,7 @@ void MainWindow::sprawdzPopiecieAparatury()
     }
     ui->statusBar->showMessage(QString("Analog Discovery: %1\t\t DMM6500: %2\t\t\t\t Lokalizacja pliku: %3").arg(analog_status ? "🟢 OK" : "🔴 Problem").arg(keythley_status ? "🟢 OK" : "🔴 Problem").arg(lokalizacja));
     ui->statusBar->setToolTip(backend().file_location);
-    ui->statusBar->setToolTipDuration(3000);
+    ui->statusBar->setToolTipDuration(5000);
     ui->pushButton_start->setEnabled(analog_status && keythley_status);
 
 }
@@ -112,7 +115,14 @@ void MainWindow::resetAfterFail(QString message)
     msgBox.setInformativeText(message);
     msgBox.setStandardButtons(QMessageBox::Ok);
     int ret = msgBox.exec();
+}
+
+void MainWindow::resetUI()
+{
+    ui->pushButton_start->setEnabled(true);
     ui->progressBar->setValue(0);
+    ui->progressBar->setEnabled(false);
+    aparatura_timer->start();
 }
 
 void MainWindow::on_spinBox_A_valueChanged(int arg1)
@@ -240,10 +250,6 @@ void MainWindow::on_pushButton_start_clicked()
     aparatura_timer->stop();
     ui->pushButton_start->setEnabled(false);
     ui->progressBar->setEnabled(true);
-    backend().runMeasurement(ui->spinBox_czest->value());
-    ui->pushButton_start->setEnabled(true);
-    ui->progressBar->setEnabled(false);
-    aparatura_timer->start();
 }
 
 

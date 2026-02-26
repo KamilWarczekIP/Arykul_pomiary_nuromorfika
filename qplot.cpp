@@ -111,7 +111,16 @@ void QPlot::paintEvent(QPaintEvent* event)
     painter.setPen(Qt::white);
 
     if(backend().wait_time > LETTER_WIDTH * 7)
-        painter.drawText(painter_x_position + backend().wait_time / 2 - LETTER_WIDTH * 3, center + LETTER_HEIGHT, "WAIT TIME");
+    {
+        if(painter_x_position + backend().wait_time > this->width())
+        {
+            painter.drawText(painter_x_position + LETTER_WIDTH, center + LETTER_HEIGHT, tr("WAIT TIME (%1 μs)").arg(backend().wait_time));
+        }
+        else
+        {
+            painter.drawText(painter_x_position + backend().wait_time / 2 - LETTER_WIDTH * 3, center + LETTER_HEIGHT, "WAIT TIME");
+        }
+    }
     painter.drawLine(painter_x_position, center, painter_x_position + backend().wait_time, center);
 
 
@@ -126,7 +135,4 @@ void QPlot::paintEvent(QPaintEvent* event)
         painter.drawLine(offset, top, offset, bottom);
         painter.drawText(offset + LETTER_WIDTH, LETTER_HEIGHT, QString::number(offset) + " μs");
     }
-
-    // skalowanie do widget [TODO]
-    // kolory oznaczenia [ok]
 }

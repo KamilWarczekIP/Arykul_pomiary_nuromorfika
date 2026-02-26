@@ -189,7 +189,8 @@ void Backend::outputPreview()
     qDebug() << "TRIG OFFSET: " << trigger_offset;
     qDebug() << "WAIT TIME: " << wait_time;
     qDebug() << "ALL FREQ. CALC.: " << getCalculatedFrequencyOfExcitation();
-    qDebug() << "FILE: " << file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-"));
+    QString debug_file_location = file_location;
+    qDebug() << "FILE: " << debug_file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-"));
 }
 
 Signal Backend::generateTriggerSignal()
@@ -380,8 +381,9 @@ void Backend::fail_cleanup(QString message)
     FDwfDeviceClose(analog_handle);
 }
 
-void Backend::runMeasurement(double const frequency)
+void Backend::runMeasurement()
 {
+    FDwfDeviceCloseAll();
     FDwfParamSet(DwfParamOnClose, 0);
     FDwfDeviceOpen(-1, &analog_handle);
     DWFERC rec;
@@ -391,8 +393,9 @@ void Backend::runMeasurement(double const frequency)
         emit fail("Nie udało się połączyć z analogiem");
         return;
     }
-    FDwfDeviceAutoConfigureSet(analog_handle, 0);
     FDwfDeviceReset(analog_handle);
+    FDwfDeviceAutoConfigureSet(analog_handle, false);
+    FDwfAnalogOutReset(analog_handle, CHANNEL_BOTH);
 
     FDwfAnalogOutFrequencyInfo(analog_handle, CHANNEL0, &min_freq, &max_freq);
 
@@ -451,17 +454,17 @@ void Backend::runMeasurement(double const frequency)
     // Set run time
     FDwfAnalogOutRunSet(analog_handle, CHANNEL_BOTH, (double)signal.count / GENERATION_FREQ );
 
-    // Set master/slave synchronization
-    FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
 
     // set signals and remember to free memory
     setSignal(CHANNEL0, signal);
     setSignal(CHANNEL1, trigger_signal);
 
+    // Set master/slave synchronization
+    FDwfAnalogOutMasterSet(analog_handle, CHANNEL0, CHANNEL1);
 
-    char error_message_buffer[256];
-    FDwfGetLastErrorMsg(error_message_buffer);
-    emit fail("Analog Discovery error: " + QString::fromLocal8Bit(error_message_buffer));
+    // char error_message_buffer[256];
+    // FDwfGetLastErrorMsg(error_message_buffer);
+    // emit fail("Analog Discovery error: " + QString::fromLocal8Bit(error_message_buffer));
 
     FDwfGetLastError(&rec);
     if(rec != dwfercNoErc)
@@ -541,7 +544,8 @@ void Backend::runMeasurement(double const frequency)
     emit progress(80);
     //Przygotowanie plików do zapisu
     QString czas_pomiaru = QDateTime::currentDateTime().toString(Qt::DateFormat::ISODate).replace(":", "-");
-    QString likalizacja_pliku_wyniki = file_location.append("/wyniki-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    QString likalizacja_pliku_wyniki = file_location;
+    likalizacja_pliku_wyniki.append("/wyniki-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
     QFile plik_wyniki = QFile(likalizacja_pliku_wyniki);
     if(!plik_wyniki.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
     {
@@ -552,7 +556,8 @@ void Backend::runMeasurement(double const frequency)
         return;
     }
     emit progress(85);
-    QString likalizacja_pliku_parametry = file_location.append("/parametryPomiaru-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
+    QString likalizacja_pliku_parametry = file_location;
+    likalizacja_pliku_parametry.append("/parametryPomiaru-%1-%2.csv").arg(filename_suffix, czas_pomiaru);
     QFile plik_parametry = QFile(likalizacja_pliku_parametry);
     if(!plik_parametry.open(QIODevice::Text | QIODevice::Truncate | QIODevice::WriteOnly))
     {
@@ -571,7 +576,7 @@ void Backend::runMeasurement(double const frequency)
     measurement_parameters += QString("Amplitude [mV], %1 \n").arg(amplitude);
     measurement_parameters += QString("Readout amplitude [mV], %1 \n").arg(readout_amplitude);
     measurement_parameters += QString("Repat times, %1 \n").arg(repeat_times);
-    measurement_parameters += QString("Frequency set, %1 \n").arg(frequency);
+    // measurement_parameters += QString("Frequency set, %1 \n").arg(frequency);
     measurement_parameters += QString("Frequency calculated, %1 \n").arg(getCalculatedFrequencyOfExcitation());
     plik_parametry.write(measurement_parameters.toLocal8Bit());
     plik_parametry.close();
@@ -627,6 +632,7 @@ void Backend::runMeasurement(double const frequency)
     emit progress(100);
     viClose(keythley_handle);
     FDwfDeviceClose(analog_handle);
+    emit finishedMeasurement();
 }
 QString Backend::getMeasurementTypeName()
 {

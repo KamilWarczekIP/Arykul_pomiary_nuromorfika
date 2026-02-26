@@ -62,7 +62,7 @@ signals:
 
 public slots:
     void outputPreview();
-    void runMeasurement(double const frequency);
+    void runMeasurement();
 
 private slots:
     void fail_cleanup(QString message);
