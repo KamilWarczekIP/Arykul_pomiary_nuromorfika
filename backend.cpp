@@ -485,7 +485,7 @@ void Backend::runMeasurement()
         emit fail("Nie udalo sie nawiazac polaczniea z keythleyem");
         return;
     }
-    viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 5000);
+    viSetAttribute(keythley_handle, VI_ATTR_TMO_VALUE, 1000);
     QString tsp_command = QString(
     // -- resetowanie i ustawienia początkowe
     "dmm.reset()"
@@ -524,11 +524,13 @@ void Backend::runMeasurement()
         return;
     }
 
+    constexpr unsigned long STABLIZE_TIME = 5000;
+    this->thread()->usleep(STABLIZE_TIME);
+
     // Run analog signal
     FDwfAnalogOutConfigure(analog_handle, CHANNEL1, true);
     emit progress(10);
-
-    this->thread()->usleep(MICROSEC_IN_SEC * (getSignalTimeInSeconds() + ((double)wait_time / MICROSEC_IN_SEC)) * repeat_times);
+    this->thread()->usleep((MICROSEC_IN_SEC * getSignalTimeInSeconds() + wait_time) * repeat_times + STABLIZE_TIME);
 
 
     // Download results keythley

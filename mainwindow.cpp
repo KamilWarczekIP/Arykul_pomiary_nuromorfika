@@ -73,7 +73,7 @@ MainWindow::~MainWindow()
 void MainWindow::loadAnalogDataForFirstTime()
 {
     ui->label_ostrzeenie->hide();
-    ui->pushButton_ostrzezenie->hide();
+    ui->label_ostrzezenie_icon->hide();
 
     backend().analogDiscoveryfetchMaxSamples();
     backend().analogDiscoveryfetchMaxWaitTime();
@@ -120,6 +120,24 @@ void MainWindow::resetAfterFail(QString message)
 void MainWindow::resetUI()
 {
     ui->pushButton_start->setEnabled(true);
+
+    constexpr bool STATUS = true;
+    ui->pushButton_max_czest->setEnabled(STATUS);
+    ui->pushButton_lokalizacja_pliku->setEnabled(STATUS);
+    ui->spinBox_A->setEnabled(STATUS);
+    ui->spinBox_B->setEnabled(STATUS);
+    ui->spinBox_C->setEnabled(STATUS);
+    ui->spinBox_D->setEnabled(STATUS);
+    ui->comboBox->setEnabled(STATUS);
+    on_comboBox_currentIndexChanged(ui->comboBox->currentIndex());
+    ui->spinBox_czest->setEnabled(STATUS);
+    ui->spinBox_amplituda->setEnabled(STATUS);
+    ui->spinBox_amplituda_odczytu->setEnabled(STATUS);
+    ui->spinBox_tigger_offset->setEnabled(STATUS);
+    ui->spinBox_liczba_pomiarow->setEnabled(STATUS);
+    ui->lineEdit_nazwa->setEnabled(STATUS);
+
+    ui->pushButton_start->setText("START");
     ui->progressBar->setValue(0);
     ui->progressBar->setEnabled(false);
     aparatura_timer->start();
@@ -250,6 +268,23 @@ void MainWindow::on_pushButton_start_clicked()
     aparatura_timer->stop();
     ui->pushButton_start->setEnabled(false);
     ui->progressBar->setEnabled(true);
+
+    constexpr bool STATUS = false;
+    ui->pushButton_max_czest->setEnabled(STATUS);
+    ui->pushButton_lokalizacja_pliku->setEnabled(STATUS);
+    ui->spinBox_A->setEnabled(STATUS);
+    ui->spinBox_B->setEnabled(STATUS);
+    ui->spinBox_C->setEnabled(STATUS);
+    ui->spinBox_D->setEnabled(STATUS);
+    ui->comboBox->setEnabled(STATUS);
+    ui->spinBox_czest->setEnabled(STATUS);
+    ui->spinBox_amplituda->setEnabled(STATUS);
+    ui->spinBox_amplituda_odczytu->setEnabled(STATUS);
+    ui->spinBox_tigger_offset->setEnabled(STATUS);
+    ui->spinBox_liczba_pomiarow->setEnabled(STATUS);
+    ui->lineEdit_nazwa->setEnabled(STATUS);
+
+    ui->pushButton_start->setText("Czekej mierze...");
 }
 
 
