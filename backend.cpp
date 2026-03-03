@@ -252,26 +252,26 @@ Signal Backend::generateTriggerSignal()
 
 
 
-    for(size_t index = 0; index < offset_index; index++)
+    for(size_t index = 0; index < signal.count; index++)
     {
         signal.samples[index] = 0.0;
     }
 
     int trigger_length = measurement_type == Impulse_pomiar_scalony ? B_samples : D_samples;
-    for(size_t index = 0; index < trigger_length; index++)
+    for(size_t index = offset_index + trigger_offset_samples; index < std::min(trigger_length  + offset_index + trigger_offset_samples, (size_t)signal.count); index++)
     {
-        signal.samples[index + offset_index] = 1.0;
+        signal.samples[index] = 1.0;
     }
 
     //trigger przesuniecie - nadpisuje zerami
-    for(size_t index = 0; index < trigger_offset_samples; index++)
-    {
-        signal.samples[index + offset_index] = 0.0;
-    }
-    for(size_t index = offset_index + trigger_length; index < signal.count; index++)
-    {
-        signal.samples[index] = 0.0;
-    }
+    // for(size_t index = 0; index < trigger_offset_samples; index++)
+    // {
+    //     signal.samples[index + offset_index] = 0.0;
+    // }
+    // for(size_t index = offset_index + trigger_length; index < signal.count; index++)
+    // {
+    //     signal.samples[index] = 0.0;
+    // }
     return signal;
 }
 
@@ -541,13 +541,23 @@ void Backend::runMeasurement()
     // Download results keythley
     tsp_command = QString(
         "display.clear()\n"
-        "beeper.beep(0.3, 2400)\n"
+        "beeper.beep(0.1, 2400)\n"
+        "beeper.beep(0.11, 3000)\n"
+        "beeper.beep(0.04, 2200)\n"
+        "beeper.beep(0.1, 2400)\n"
+        "beeper.beep(0.02, 1500)\n"
+        "beeper.beep(0.07, 2000)\n"
         "format.asciiprecision = 6\n"
         "format.data = format.ASCII\n"
-        "for x = 1, defbuffer1.n do\n"
-        "\tprintbuffer(x, x, defbuffer1.readings, defbuffer1.relativetimestamps)\n"
-        "end\n"
-        // "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.units, defbuffer1.relativetimestamps)\n"
+        // "script.delete(\"buforuj\")\n"
+        // "loadscript buforuj\n"
+        // "for value = 1, defbuffer1.n do\n"
+        // "printbuffer(value, value, defbuffer1.readings, defbuffer1.relativetimestamps)\n"
+        // "end \n"
+        // "endscript\n"
+        // "buforuj.save()\n"
+        // "buforuj()\n"
+        "printbuffer(1, defbuffer1.n, defbuffer1, defbuffer1.relativetimestamps)\n"
     );
 
     //Przygotowanie plików do zapisu
@@ -592,7 +602,7 @@ void Backend::runMeasurement()
 
     emit progress(90);
     // Powinno być 24 bajty na jeden rekord
-    char* buffer = new char[64 * repeat_times];
+    char* buffer = new char[128 * repeat_times];
     keythley_status = viQueryf(keythley_handle, reinterpret_cast<ViConstString>(tsp_command.toStdString().c_str()), "%t", buffer);
     if (keythley_status != VI_SUCCESS)
     {
@@ -603,8 +613,25 @@ void Backend::runMeasurement()
         return;
     }
 
-    // buffer[retCount] = 0;  // Null-terminate the string
+    buffer[retCount] = 0;  // Null-terminate the string
     // qDebug() << "Instrument response: " << buffer;
+
+    bool second = false;
+    for(size_t i = 0 ; i < retCount; i++)
+    {
+        if(buffer[i] == ',')
+        {
+            if(second)
+            {
+                buffer[i] = '\n';
+                second= false;
+            }
+            else
+            {
+                second = true;
+            }
+        }
+    }
 
     // Save results
     if(plik_wyniki.write(buffer) != retCount)
@@ -613,6 +640,7 @@ void Backend::runMeasurement()
         delete[] signal.samples;
         delete[] trigger_signal.samples;
         emit fail("Nie udało się zapisać całego pliku :< ");
+        return;
     }
 
 
@@ -621,6 +649,13 @@ void Backend::runMeasurement()
     delete[] signal.samples;
     delete[] trigger_signal.samples;
 
+    tsp_command = QString("display.changescreen(display.SCREEN_GRAPH)\n");
+    keythley_status = viWrite(keythley_handle, reinterpret_cast<ViConstBuf>(tsp_command.toStdString().c_str()), tsp_command.size(), &retCount);
+    if (keythley_status != VI_SUCCESS)
+    {
+        emit fail("Nie udalo sie przeslac skryptu wyswietlania grafu na keythleya");
+        return;
+    }
 
     // Display plot with results preview - close all connections
     emit progress(100);

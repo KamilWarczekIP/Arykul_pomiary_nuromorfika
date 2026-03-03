@@ -40,7 +40,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->comboBox->setCurrentIndex((int)backend().measurement_type);
     recalculateLimits();
     ui->pushButton_max_czest->click();
-    setUIEnabled(false);
+    // ui->spinBox_czest->setValue(backend().getCalculatedFrequencyOfExcitation());
+    setUIEnabled(false); // TODO chnage to false
     ui->spinBox_C->setEnabled(false);
     ui->spinBox_D->setEnabled(false);
 }
